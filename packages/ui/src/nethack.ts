@@ -14,6 +14,7 @@ import type { NetHackModule } from "./emscripten";
 import { InputQueue } from "./input";
 import type { TileRenderer } from "./tiles";
 import type { MenuController, MenuItem } from "./menu";
+import type { PromptController } from "./prompt";
 import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
 
 // include/wintype.h
@@ -34,6 +35,7 @@ export class NetHackUI {
   private dom!: Dom;
   private renderer!: TileRenderer;
   private menuCtl!: MenuController;
+  private promptCtl!: PromptController;
   private status!: StatusBar;
 
   private windowType = new Map<number, number>();
@@ -42,11 +44,18 @@ export class NetHackUI {
 
   private seenProcs = new Set<string>();
 
-  bind(mod: NetHackModule, dom: Dom, renderer: TileRenderer, menuCtl: MenuController): void {
+  bind(
+    mod: NetHackModule,
+    dom: Dom,
+    renderer: TileRenderer,
+    menuCtl: MenuController,
+    promptCtl: PromptController,
+  ): void {
     this.mod = mod;
     this.dom = dom;
     this.renderer = renderer;
     this.menuCtl = menuCtl;
+    this.promptCtl = promptCtl;
     this.status = new StatusBar(dom.status);
   }
 
@@ -132,16 +141,23 @@ export class NetHackUI {
         const query = args[0] as string;
         const resp = args[1] as string;
         const def = args[2] as number;
-        this.log(`${query} ${resp ? `[${resp}]` : ""}`);
-        // Auto-answer the default (or 'y') for now so startup prompts don't stall.
-        const answer = def && def > 0 ? def : "y".charCodeAt(0);
-        return answer;
+        this.log(query + (resp ? ` [${resp}]` : "") + (def ? ` (${String.fromCharCode(def)})` : ""));
+        // Wait for a valid response key (interactive — never auto-answer).
+        for (;;) {
+          const key = await this.input.nextKey();
+          if (!resp) return key; // no constraint: any key
+          if (key === 13 || key === 10) return def || resp.charCodeAt(0); // Enter → default
+          if (key === 27) return resp.includes("q") ? "q".charCodeAt(0) : def || 27; // Esc
+          if (resp.includes(String.fromCharCode(key))) return key;
+          // otherwise ignore and keep waiting
+        }
       }
 
       case "shim_getlin": {
-        // query (string), bufp (pointer we must fill). Empty line for now.
+        // query (string), bufp (pointer we must fill with the typed line).
         const bufp = args[1] as number;
-        if (bufp) this.mod.stringToUTF8("", bufp, 256);
+        const line = await this.promptCtl.getLine(args[0] as string);
+        if (bufp) this.mod.stringToUTF8(line, bufp, 256);
         return;
       }
 

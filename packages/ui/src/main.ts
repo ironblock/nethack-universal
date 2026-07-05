@@ -13,6 +13,7 @@ import { NetHackUI } from "./nethack";
 import { attachKeyboard } from "./input";
 import { TileRenderer } from "./tiles";
 import { MenuController } from "./menu";
+import { PromptController } from "./prompt";
 
 const CALLBACK_NAME = "nethackCallback";
 
@@ -27,11 +28,12 @@ async function boot(): Promise<void> {
   renderer.attach(byId("map") as HTMLCanvasElement);
 
   const menuCtl = new MenuController(byId("overlay"), renderer);
+  const promptCtl = new PromptController(byId("overlay"));
 
   const ui = new NetHackUI();
   // The shim looks up the callback by name on globalThis.
   (globalThis as Record<string, unknown>)[CALLBACK_NAME] = ui.callback;
-  (globalThis as Record<string, unknown>).__nh = { ui, renderer }; // debug handle
+  (globalThis as Record<string, unknown>).__nh = { ui, renderer, menuCtl, promptCtl }; // debug handle
   attachKeyboard(ui.input);
   // Click a map cell to travel there (left) or look (right).
   renderer.onCellClick((x, y, button) => ui.input.push({ kind: "mouse", x, y, button }));
@@ -70,7 +72,7 @@ async function boot(): Promise<void> {
   };
 
   const m = await factory(mod);
-  ui.bind(m, dom, renderer, menuCtl);
+  ui.bind(m, dom, renderer, menuCtl, promptCtl);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 
