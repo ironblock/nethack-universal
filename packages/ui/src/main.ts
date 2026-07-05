@@ -63,10 +63,10 @@ async function boot(): Promise<void> {
         // Fully specify the character AND disable the 5.0 tutorial prompt — it's
         // a forced PICK_ONE menu that would loop until we implement real menu
         // selection (Phase 2). !legacy skips the intro poem's --More--.
-        // Menus (Phase 2) now handle the tutorial prompt; flip !tutorial off to
-        // show the real 5.0 tutorial menu on new games.
-        m.ENV.NETHACKOPTIONS =
-          "role:Valkyrie,race:human,gender:female,align:lawful,!tutorial,!legacy,time,showexp";
+        // Real character selection now works via the menu system (Phase 2), so
+        // we no longer pre-specify role/race/gender/align. !tutorial keeps the
+        // tutorial prompt off; time/showexp drive the status line.
+        m.ENV.NETHACKOPTIONS = "!tutorial,!legacy,time,showexp";
       },
     ],
   };
