@@ -16,6 +16,7 @@ import type { TileRenderer } from "./tiles";
 import type { MenuController, MenuItem } from "./menu";
 import type { PromptController } from "./prompt";
 import type { Storage } from "./persistence";
+import type { TextWindowController } from "./textwindow";
 import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
 
 // include/wintype.h
@@ -38,11 +39,13 @@ export class NetHackUI {
   private menuCtl!: MenuController;
   private promptCtl!: PromptController;
   private storage!: Storage;
+  private textWinCtl!: TextWindowController;
   private status!: StatusBar;
 
   private windowType = new Map<number, number>();
   private nextWinid = 1;
   private menus = new Map<number, { items: MenuItem[]; prompt: string }>();
+  private textBuffers = new Map<number, string[]>();
 
   private seenProcs = new Set<string>();
 
@@ -53,6 +56,7 @@ export class NetHackUI {
     menuCtl: MenuController,
     promptCtl: PromptController,
     storage: Storage,
+    textWinCtl: TextWindowController,
   ): void {
     this.mod = mod;
     this.dom = dom;
@@ -60,6 +64,7 @@ export class NetHackUI {
     this.menuCtl = menuCtl;
     this.promptCtl = promptCtl;
     this.storage = storage;
+    this.textWinCtl = textWinCtl;
     this.status = new StatusBar(dom.status);
   }
 
@@ -85,9 +90,17 @@ export class NetHackUI {
         if (this.windowType.get(args[0] as number) === NHW.MAP) this.renderer.clear();
         return;
       }
-      case "shim_display_nhwindow":
+      case "shim_display_nhwindow": {
+        const window = args[0] as number;
+        if (this.windowType.get(window) === NHW.TEXT) {
+          const lines = this.textBuffers.get(window);
+          if (lines?.length) await this.textWinCtl.show(lines);
+        }
+        return;
+      }
       case "shim_destroy_nhwindow":
-        if (name === "shim_destroy_nhwindow") this.windowType.delete(args[0] as number);
+        this.windowType.delete(args[0] as number);
+        this.textBuffers.delete(args[0] as number);
         return;
 
       case "shim_print_glyph": {
@@ -106,8 +119,14 @@ export class NetHackUI {
       }
 
       case "shim_putstr": {
-        const str = args[2] as string;
-        if (str) this.log(str);
+        const window = args[0] as number;
+        const str = (args[2] as string) ?? "";
+        if (this.windowType.get(window) === NHW.TEXT) {
+          if (!this.textBuffers.has(window)) this.textBuffers.set(window, []);
+          this.textBuffers.get(window)!.push(str);
+        } else if (str) {
+          this.log(str);
+        }
         return;
       }
       case "shim_raw_print":

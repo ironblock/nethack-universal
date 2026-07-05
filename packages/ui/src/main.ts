@@ -15,6 +15,7 @@ import { TileRenderer } from "./tiles";
 import { MenuController } from "./menu";
 import { PromptController } from "./prompt";
 import { IdbfsStorage } from "./persistence";
+import { TextWindowController } from "./textwindow";
 
 const CALLBACK_NAME = "nethackCallback";
 
@@ -30,6 +31,7 @@ async function boot(): Promise<void> {
 
   const menuCtl = new MenuController(byId("overlay"), renderer);
   const promptCtl = new PromptController(byId("overlay"));
+  const textWinCtl = new TextWindowController(byId("overlay"));
 
   const ui = new NetHackUI();
   // The shim looks up the callback by name on globalThis.
@@ -81,7 +83,7 @@ async function boot(): Promise<void> {
   await storage.load();
   window.addEventListener("pagehide", () => void storage.save());
 
-  ui.bind(m, dom, renderer, menuCtl, promptCtl, storage);
+  ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 
