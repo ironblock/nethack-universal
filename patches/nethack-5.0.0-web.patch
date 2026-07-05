@@ -1,0 +1,72 @@
+diff --git a/sys/libnh/libnhmain.c b/sys/libnh/libnhmain.c
+index f974bc4..385a264 100644
+--- a/sys/libnh/libnhmain.c
++++ b/sys/libnh/libnhmain.c
+@@ -781,18 +781,30 @@ opt_terminate(void)
+     /*NOTREACHED*/
+ }
+ 
+-/* show the sysconf file name, playground directory, run-time configuration
+-   file name, dumplog file name if applicable, and some other things */
+-ATTRNORETURN void
+-after_opt_showpaths(const char *dir)
++/* nethack-universal: after_opt_showpaths() was removed here — it is defined
++   identically in the shared src/earlyarg.c (always linked into the WASM build)
++   and declared in include/extern.h. Newer clang/wasm-ld (emscripten) rejects the
++   duplicate definition that the DevTeam's older toolchain silently merged. */
++
++/* nethack-universal: get_nhuuid()/free_nhuuid() are called unconditionally by
++   the core (allmain.c, save.c). Every other platform main defines them, but the
++   libnh main never did, so the WASM link left them undefined and the game would
++   trap at startup. NHUUID is disabled for the WASM build (macuuid.m is Objective-C
++   and can't cross-compile), so these mirror the NHUUID-off behavior. */
++void
++get_nhuuid(void)
+ {
+-#ifdef CHDIR
+-    chdirx(dir, FALSE);
+-#else
+-    nhUse(dir);
+-#endif
+-    opt_terminate();
+-    /*NOTREACHED*/
++    /* no uuid on the WASM target */
++}
++
++void
++free_nhuuid(void)
++{
++    int i;
++
++    for (i = 0; i < SIZE(svn.nhuuid); i++) {
++        svn.nhuuid[i] = 0;
++    }
+ }
+ 
+ #ifdef __EMSCRIPTEN__
+diff --git a/sys/unix/hints/include/cross-pre2.500 b/sys/unix/hints/include/cross-pre2.500
+index ddc3ba7..f3ad17a 100644
+--- a/sys/unix/hints/include/cross-pre2.500
++++ b/sys/unix/hints/include/cross-pre2.500
+@@ -282,7 +282,7 @@ EMCC_LFLAGS += -s MODULARIZE
+ EMCC_LFLAGS += -s EXPORTED_FUNCTIONS='["_main", "_shim_graphics_set_callback", "_repopulate_perminvent", "_malloc"]'
+ EMCC_LFLAGS += -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall", "addFunction", \
+ 			"removeFunction", "UTF8ToString", "stringToUTF8", "getValue", \
+-			"setValue", "ENV", "FS", "IDBFS"]'
++			"setValue", "ENV", "FS", "IDBFS", "callMain"]'
+ EMCC_LFLAGS += -s ERROR_ON_UNDEFINED_SYMBOLS=0
+ EMCC_LFLAGS += -s EXPORT_ES6=1
+ EMCC_LFLAGS += -lidbfs.js
+@@ -295,7 +295,11 @@ EMCC_LFLAGS += --embed-file $(WASM_DATA_DIR)@/
+ # WASM C flags
+ EMCC_CFLAGS =
+ EMCC_CFLAGS += -Wall
+-EMCC_CFLAGS += -Werror
++# nethack-universal: upstream's -Werror is calibrated to the DevTeam's compiler.
++# emscripten 6.0.2 ships a newer clang that flags benign warnings (e.g.
++# -Wunused-but-set-variable on globals like cvtinit). Keep warnings visible but
++# don't fail the cross build on them.
++EMCC_CFLAGS += -Wno-error
+ EMCC_CFLAGS += -DNO_SIGNAL
+ #EMCC_CFLAGS += -s DISABLE_EXCEPTION_CATCHING=0
+ EMCC_DEBUG_LFLAGS += -s ASSERTIONS=1

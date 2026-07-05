@@ -1,0 +1,87 @@
+/**
+ * Phase-0 bootstrap: load the WASM core, register the window-proc callback
+ * before `main` auto-runs, and point NetHack at the embedded data.
+ *
+ * Ordering matters. `main()` (in sys/libnh/libnhmain.c) auto-runs during module
+ * init and immediately starts calling window procs. `js_helpers_init()` (which
+ * installs the pointer helpers the shim needs) also runs inside `main`. So we
+ * register our callback in `onRuntimeInitialized`, which emscripten fires just
+ * before `callMain`, guaranteeing the shim sees a callback from the first proc.
+ */
+import type { NetHackFactory, NetHackModule } from "./emscripten";
+import { NetHackUI } from "./nethack";
+import { attachKeyboard } from "./input";
+
+const CALLBACK_NAME = "nethackCallback";
+
+async function boot(): Promise<void> {
+  const dom = {
+    map: byId("map"),
+    messages: byId("messages"),
+    status: byId("status"),
+  };
+
+  const ui = new NetHackUI();
+  // The shim looks up the callback by name on globalThis.
+  (globalThis as Record<string, unknown>)[CALLBACK_NAME] = ui.callback;
+  attachKeyboard(ui.input);
+
+  // Emscripten ES6 module: default export is the factory. It lives in /public
+  // and is served as-is; hide the specifier from Vite's import-analysis so the
+  // browser does a native runtime import instead of a build-time transform.
+  const nativeImport = new Function("u", "return import(u)") as (u: string) => Promise<{
+    default: NetHackFactory;
+  }>;
+  const { default: factory } = await nativeImport("/core/nethack.js");
+
+  const mod: Partial<NetHackModule> = {
+    // Don't auto-run main(); we start it ourselves after the callback is wired,
+    // so the shim never sees a null callback (which would spin nhgetch and peg
+    // the main thread instead of suspending via Asyncify).
+    noInitialRun: true,
+    locateFile: (path) => `/core/${path}`,
+    print: (s) => console.log("[nh stdout]", s),
+    printErr: (s) => console.log("[nh stderr]", s),
+    preRun: [
+      () => {
+        const m = mod as NetHackModule;
+        m.ENV.NETHACKDIR = "/"; // embedded data (nhdat, sysconf) is at FS root
+        m.ENV.HACKDIR = "/";
+        m.ENV.USER = "Adventurer";
+        // Fully specify the character AND disable the 5.0 tutorial prompt — it's
+        // a forced PICK_ONE menu that would loop until we implement real menu
+        // selection (Phase 2). !legacy skips the intro poem's --More--.
+        m.ENV.NETHACKOPTIONS =
+          "role:Valkyrie,race:human,gender:female,align:lawful,!tutorial,!legacy";
+      },
+    ],
+  };
+
+  const m = await factory(mod);
+  ui.bind(m, dom);
+  m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
+  console.log("[nethack] callback registered; starting main()");
+
+  // Asyncify: callMain returns as soon as the core suspends for input.
+  try {
+    m.callMain(["-u", "Adventurer"]);
+  } catch (e) {
+    if (!isExitStatus(e)) throw e;
+  }
+}
+
+function isExitStatus(e: unknown): boolean {
+  return typeof e === "object" && e !== null && "status" in e;
+}
+
+function byId(id: string): HTMLElement {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`missing #${id}`);
+  return el;
+}
+
+boot().catch((err) => {
+  console.error(err);
+  const el = document.getElementById("messages");
+  if (el) el.textContent = `boot error: ${err?.message ?? err}`;
+});

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nethack-universal — Phase 0 spike</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #111;
+        color: #ddd;
+        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+      header { padding: 6px 10px; background: #1b1b1b; font-size: 13px; color: #9a9; }
+      #status { padding: 4px 10px; background: #161616; color: #cc9; white-space: pre; min-height: 1em; }
+      #map {
+        flex: 1;
+        margin: 0;
+        padding: 8px 10px;
+        white-space: pre;
+        line-height: 1.05;
+        font-size: 16px;
+        letter-spacing: 0.5px;
+        overflow: hidden;
+        color: #cfc;
+      }
+      #messages {
+        height: 22vh;
+        overflow-y: auto;
+        padding: 6px 10px;
+        background: #0c0c0c;
+        border-top: 1px solid #333;
+        font-size: 13px;
+        color: #bcb;
+      }
+      #messages div { margin: 1px 0; }
+    </style>
+  </head>
+  <body>
+    <header>nethack-universal — Phase 0: ASCII spike (arrows move, space advances, letters = commands)</header>
+    <div id="status"></div>
+    <pre id="map">loading NetHack 5.0.0 core…</pre>
+    <div id="messages"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

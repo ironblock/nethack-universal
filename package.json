@@ -1,0 +1,12 @@
+{
+  "name": "nethack-universal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser-first NetHack 5.0.0 client (WASM core + TypeScript UI), desktop to follow.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build:core": "bash packages/core-wasm/build.sh"
+  }
+}

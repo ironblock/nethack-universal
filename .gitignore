@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# NetHack in-tree build artifacts (the vendored source builds into itself)
+vendor/nethack/targets/
+vendor/nethack/lib/
+vendor/nethack/**/*.o
+vendor/nethack/src/nethack
+vendor/nethack/util/makedefs
+vendor/nethack/util/dgn_comp
+vendor/nethack/util/lev_comp
+vendor/nethack/util/dlb
+vendor/nethack/util/recover
+vendor/nethack/util/tile2*
+vendor/nethack/dat/*.lua.out
+
+# Emscripten cache noise
+.emscripten_cache/
+
+# Our vendored WASM artifacts land here via the build wrapper; keep source, ignore built blobs
+packages/core-wasm/artifacts/
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Vite-served copy of the WASM core (produced by build:core)
+packages/ui/public/core/
