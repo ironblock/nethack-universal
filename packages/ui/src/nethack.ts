@@ -6,26 +6,21 @@
  * as `callback(name, ...args)` and expects a Promise whose resolved value is the
  * proc's return value (written back through `setPointerValue`).
  *
- * This is the Phase-0 renderer: an ASCII map read from each glyph's `ttychar`,
- * a scrolling message log, and keyboard input. Tiles, menus, mouse, and the HUD
- * come in Phases 1–2; unhandled procs are logged so we can see what the core asks
- * for next.
+ * Phase 1: graphical tiles blitted to a canvas (TileRenderer), a scrolling
+ * message log, and keyboard input. Menus, mouse, and the HUD come in Phase 2;
+ * unhandled procs are logged so we can see what the core asks for next.
  */
 import type { NetHackModule } from "./emscripten";
 import { InputQueue } from "./input";
+import type { TileRenderer } from "./tiles";
 
 // include/wintype.h
 const NHW = { MESSAGE: 1, STATUS: 2, MAP: 3, MENU: 4, TEXT: 5, PERMINVENT: 6 } as const;
 
-// NetHack map dimensions (include/config.h): COLNO=80, ROWNO=21.
-const COLNO = 80;
-const ROWNO = 21;
-
-// glyph_info layout (include/wintype.h): int glyph; int ttychar; uint32 framecolor; ...
-const GLYPHINFO_TTYCHAR_OFFSET = 4;
+// glyph_info layout (include/wintype.h): int glyph @0; int ttychar @4; ...
+const GLYPHINFO_GLYPH_OFFSET = 0;
 
 interface Dom {
-  map: HTMLElement;
   messages: HTMLElement;
   status: HTMLElement;
 }
@@ -35,17 +30,17 @@ export class NetHackUI {
 
   private mod!: NetHackModule;
   private dom!: Dom;
+  private renderer!: TileRenderer;
 
   private windowType = new Map<number, number>();
   private nextWinid = 1;
 
-  private grid: string[][] = blankGrid();
-  private renderScheduled = false;
   private seenProcs = new Set<string>();
 
-  bind(mod: NetHackModule, dom: Dom): void {
+  bind(mod: NetHackModule, dom: Dom, renderer: TileRenderer): void {
     this.mod = mod;
     this.dom = dom;
+    this.renderer = renderer;
   }
 
   /** Set true to trace every window-proc call to the console (capped). */
@@ -67,27 +62,25 @@ export class NetHackUI {
         return id;
       }
       case "shim_clear_nhwindow": {
-        if (this.windowType.get(args[0] as number) === NHW.MAP) {
-          this.grid = blankGrid();
-          this.scheduleRender();
-        }
+        if (this.windowType.get(args[0] as number) === NHW.MAP) this.renderer.clear();
         return;
       }
       case "shim_display_nhwindow":
-        this.scheduleRender();
-        return;
       case "shim_destroy_nhwindow":
-        this.windowType.delete(args[0] as number);
+        if (name === "shim_destroy_nhwindow") this.windowType.delete(args[0] as number);
         return;
 
       case "shim_print_glyph": {
         const x = args[1] as number;
         const y = args[2] as number;
         const glyphinfo = args[3] as number;
-        if (glyphinfo && x >= 0 && x < COLNO && y >= 0 && y < ROWNO) {
-          const ttychar = this.mod.getValue(glyphinfo + GLYPHINFO_TTYCHAR_OFFSET, "i32");
-          this.grid[y]![x] = ttychar > 0 ? String.fromCharCode(ttychar) : " ";
-          this.scheduleRender();
+        const bkglyphinfo = args[4] as number;
+        // Draw the background glyph (e.g. floor) first, then the foreground.
+        if (bkglyphinfo) {
+          this.renderer.drawGlyph(x, y, this.mod.getValue(bkglyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32"));
+        }
+        if (glyphinfo) {
+          this.renderer.drawGlyph(x, y, this.mod.getValue(glyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32"));
         }
         return;
       }
@@ -158,21 +151,30 @@ export class NetHackUI {
       case "set_shim_font_name":
         return 0;
 
-      // Known-but-ignored for Phase 0.
+      case "shim_curs": {
+        // Cursor placement on the map window ≈ the hero's cell; follow it.
+        if (this.windowType.get(args[0] as number) === NHW.MAP) {
+          this.renderer.centerOn(args[1] as number, args[2] as number);
+        }
+        return;
+      }
+      case "shim_cliparound":
+        this.renderer.centerOn(args[0] as number, args[1] as number);
+        return;
+
+      // Known-but-ignored for now.
       case "shim_init_nhwindows":
       case "shim_askname":
       case "shim_get_nh_event":
       case "shim_exit_nhwindows":
       case "shim_suspend_nhwindows":
       case "shim_resume_nhwindows":
-      case "shim_curs":
       case "shim_display_file":
       case "shim_start_menu":
       case "shim_add_menu":
       case "shim_end_menu":
       case "shim_mark_synch":
       case "shim_wait_synch":
-      case "shim_cliparound":
       case "shim_update_positionbar":
       case "shim_nhbell":
       case "shim_number_pad":
@@ -201,19 +203,4 @@ export class NetHackUI {
     this.dom.messages.appendChild(el);
     this.dom.messages.scrollTop = this.dom.messages.scrollHeight;
   }
-
-  private scheduleRender(): void {
-    if (this.renderScheduled) return;
-    this.renderScheduled = true;
-    // queueMicrotask (not requestAnimationFrame): rAF is paused in background/
-    // inactive tabs, which would leave the map unpainted during headless runs.
-    queueMicrotask(() => {
-      this.renderScheduled = false;
-      this.dom.map.textContent = this.grid.map((row) => row.join("")).join("\n");
-    });
-  }
-}
-
-function blankGrid(): string[][] {
-  return Array.from({ length: ROWNO }, () => Array.from({ length: COLNO }, () => " "));
 }

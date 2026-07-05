@@ -47,10 +47,14 @@ npm run dev -w @nethack-universal/ui              # http://localhost:5173
 
 ## Status
 
-**Phase 0 complete** — the 5.0.0 core compiles to WASM and boots in the browser: it
-renders an ASCII map, runs the real move loop, and responds to input (blocking input
-handled via Asyncify). Next: graphical tiles (Phase 1), clickable menus/inventory and
-mouse (Phase 2).
+**Phases 0–1 complete** — the 5.0.0 core compiles to WASM, boots in the browser,
+renders **graphical tiles** to a canvas (the shipped 5.0 tileset, 2303 tiles incl.
+statues), runs the real move loop, follows the hero, and responds to input (blocking
+input via Asyncify). Tile assets are generated from source by
+`packages/core-wasm/gen-tiles.sh` (host `tilemap`/`tile2bmp` → PNG + `glyph2tile.json`).
+
+Next: clickable menus/inventory and mouse (Phase 2), then persistence/options (Phase 3),
+then the Tauri desktop shell (Phase 4).
 
 ## Licensing
 

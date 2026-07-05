@@ -38,4 +38,7 @@ if ! ls "$NH"/lib/lua-*/src/lua.h >/dev/null 2>&1; then
   make -C "$NH" fetch-lua
 fi
 
+echo ">> Generating tile assets"
+bash "$ROOT/packages/core-wasm/gen-tiles.sh"
+
 echo ">> Core prep complete. Now run: npm run build:core"

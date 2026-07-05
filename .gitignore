@@ -31,3 +31,6 @@ packages/core-wasm/artifacts/
 
 # Vite-served copy of the WASM core (produced by build:core)
 packages/ui/public/core/
+
+# Generated tile assets (produced by tools/gen-tiles.mjs)
+packages/ui/public/tiles/

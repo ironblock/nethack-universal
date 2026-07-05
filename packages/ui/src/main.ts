@@ -11,19 +11,24 @@
 import type { NetHackFactory, NetHackModule } from "./emscripten";
 import { NetHackUI } from "./nethack";
 import { attachKeyboard } from "./input";
+import { TileRenderer } from "./tiles";
 
 const CALLBACK_NAME = "nethackCallback";
 
 async function boot(): Promise<void> {
   const dom = {
-    map: byId("map"),
     messages: byId("messages"),
     status: byId("status"),
   };
 
+  const renderer = new TileRenderer();
+  await renderer.load();
+  renderer.attach(byId("map") as HTMLCanvasElement);
+
   const ui = new NetHackUI();
   // The shim looks up the callback by name on globalThis.
   (globalThis as Record<string, unknown>)[CALLBACK_NAME] = ui.callback;
+  (globalThis as Record<string, unknown>).__nh = { ui, renderer }; // debug handle
   attachKeyboard(ui.input);
 
   // Emscripten ES6 module: default export is the factory. It lives in /public
@@ -58,7 +63,7 @@ async function boot(): Promise<void> {
   };
 
   const m = await factory(mod);
-  ui.bind(m, dom);
+  ui.bind(m, dom, renderer);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 
