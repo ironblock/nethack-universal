@@ -110,15 +110,22 @@ export class NetHackUI {
       }
 
       case "shim_nhgetch":
-        return this.input.next();
+        return this.input.nextKey();
 
       case "shim_nh_poskey": {
-        // Keyboard only for now (no mouse). Zero out the position/modifier outs.
+        // Returns a keystroke, or 0 for a map click (with *x,*y,*mod filled).
         const [xPtr, yPtr, modPtr] = args as [number, number, number];
+        const ev = await this.input.next();
+        if (ev.kind === "mouse") {
+          if (xPtr) this.mod.setValue(xPtr, ev.x, "i16");
+          if (yPtr) this.mod.setValue(yPtr, ev.y, "i16");
+          if (modPtr) this.mod.setValue(modPtr, ev.button, "i32");
+          return 0;
+        }
         if (xPtr) this.mod.setValue(xPtr, 0, "i16");
         if (yPtr) this.mod.setValue(yPtr, 0, "i16");
         if (modPtr) this.mod.setValue(modPtr, 0, "i32");
-        return this.input.next();
+        return ev.code;
       }
 
       case "shim_yn_function": {

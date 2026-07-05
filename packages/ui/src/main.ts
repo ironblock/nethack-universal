@@ -33,6 +33,8 @@ async function boot(): Promise<void> {
   (globalThis as Record<string, unknown>)[CALLBACK_NAME] = ui.callback;
   (globalThis as Record<string, unknown>).__nh = { ui, renderer }; // debug handle
   attachKeyboard(ui.input);
+  // Click a map cell to travel there (left) or look (right).
+  renderer.onCellClick((x, y, button) => ui.input.push({ kind: "mouse", x, y, button }));
 
   // Emscripten ES6 module: default export is the factory. It lives in /public
   // and is served as-is; hide the specifier from Vite's import-analysis so the

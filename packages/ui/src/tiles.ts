@@ -53,6 +53,28 @@ export class TileRenderer {
     this.clear();
   }
 
+  /**
+   * Report map cell clicks. Left button → CLICK_1 (1), right → CLICK_2 (2).
+   * Accounts for any CSS scaling of the canvas.
+   */
+  onCellClick(handler: (x: number, y: number, button: number) => void): void {
+    const toCell = (e: MouseEvent) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const px = ((e.clientX - rect.left) * this.canvas.width) / rect.width;
+      const py = ((e.clientY - rect.top) * this.canvas.height) / rect.height;
+      return { x: Math.floor(px / this.renderSize), y: Math.floor(py / this.renderSize) };
+    };
+    this.canvas.addEventListener("click", (e) => {
+      const { x, y } = toCell(e);
+      handler(x, y, 1); // CLICK_1
+    });
+    this.canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const { x, y } = toCell(e);
+      handler(x, y, 2); // CLICK_2
+    });
+  }
+
   /** Scroll the map's scroll container so cell (x, y) is centred (follow the hero). */
   centerOn(x: number, y: number): void {
     const box = this.canvas.parentElement;

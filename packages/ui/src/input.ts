@@ -31,28 +31,44 @@ const ARROW_BY_KEY: Record<string, ArrowName> = {
   ArrowRight: "right",
 };
 
-/** An async FIFO of key codes (ints) that `nhgetch` awaits. */
-export class InputQueue {
-  private buffer: number[] = [];
-  private waiter: ((code: number) => void) | null = null;
+/** An input event: a keystroke, or a map mouse click (for nh_poskey). */
+export type NhInput =
+  | { kind: "key"; code: number }
+  | { kind: "mouse"; x: number; y: number; button: number };
 
-  push(code: number): void {
+/** An async FIFO of input events that nhgetch / nh_poskey drain. */
+export class InputQueue {
+  private buffer: NhInput[] = [];
+  private waiter: ((ev: NhInput) => void) | null = null;
+
+  push(ev: NhInput): void {
     if (this.waiter) {
       const resolve = this.waiter;
       this.waiter = null;
-      resolve(code);
+      resolve(ev);
     } else {
-      this.buffer.push(code);
+      this.buffer.push(ev);
     }
   }
 
-  /** Resolves with the next key code, waiting if the queue is empty. */
-  next(): Promise<number> {
+  pushKey(code: number): void {
+    this.push({ kind: "key", code });
+  }
+
+  /** Resolves with the next event, waiting if the queue is empty. */
+  next(): Promise<NhInput> {
     const queued = this.buffer.shift();
     if (queued !== undefined) return Promise.resolve(queued);
     return new Promise((resolve) => {
       this.waiter = resolve;
     });
+  }
+
+  /** Resolves with the next keystroke, skipping (discarding) mouse events. */
+  async nextKey(): Promise<number> {
+    let ev = await this.next();
+    while (ev.kind !== "key") ev = await this.next();
+    return ev.code;
   }
 }
 
@@ -65,18 +81,18 @@ export function attachKeyboard(queue: InputQueue): void {
     if (arrow) {
       e.preventDefault();
       held.add(arrow);
-      queue.push(arrowCommand(arrow).charCodeAt(0));
+      queue.pushKey(arrowCommand(arrow).charCodeAt(0));
       return;
     }
 
     // Special keys the core cares about.
-    if (e.key === "Enter") return queue.push(13);
-    if (e.key === "Escape") return queue.push(27);
+    if (e.key === "Enter") return queue.pushKey(13);
+    if (e.key === "Escape") return queue.pushKey(27);
     if (e.key === " ") {
       e.preventDefault();
-      return queue.push(32);
+      return queue.pushKey(32);
     }
-    if (e.key === "Backspace") return queue.push(8);
+    if (e.key === "Backspace") return queue.pushKey(8);
 
     // Printable single characters pass straight through (letters, digits,
     // punctuation commands like '.', ',', '<', '>', '#', 'i', 'S', etc.).
@@ -86,10 +102,10 @@ export function attachKeyboard(queue: InputQueue): void {
         const c = e.key.toLowerCase().charCodeAt(0);
         if (c >= 97 && c <= 122) {
           e.preventDefault();
-          return queue.push(c - 96);
+          return queue.pushKey(c - 96);
         }
       }
-      queue.push(e.key.charCodeAt(0));
+      queue.pushKey(e.key.charCodeAt(0));
     }
   });
 
