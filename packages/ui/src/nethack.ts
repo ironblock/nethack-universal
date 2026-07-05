@@ -14,6 +14,7 @@ import type { NetHackModule } from "./emscripten";
 import { InputQueue } from "./input";
 import type { TileRenderer } from "./tiles";
 import type { MenuController, MenuItem } from "./menu";
+import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
 
 // include/wintype.h
 const NHW = { MESSAGE: 1, STATUS: 2, MAP: 3, MENU: 4, TEXT: 5, PERMINVENT: 6 } as const;
@@ -33,6 +34,7 @@ export class NetHackUI {
   private dom!: Dom;
   private renderer!: TileRenderer;
   private menuCtl!: MenuController;
+  private status!: StatusBar;
 
   private windowType = new Map<number, number>();
   private nextWinid = 1;
@@ -45,6 +47,7 @@ export class NetHackUI {
     this.dom = dom;
     this.renderer = renderer;
     this.menuCtl = menuCtl;
+    this.status = new StatusBar(dom.status);
   }
 
   /** Set true to trace every window-proc call to the console (capped). */
@@ -212,6 +215,21 @@ export class NetHackUI {
         this.renderer.centerOn(args[0] as number, args[1] as number);
         return;
 
+      case "shim_status_update": {
+        // args (fmt "vipiiip"): fldidx, value ptr, chg, percent, color, colormasks
+        const idx = args[0] as number;
+        const ptr = args[1] as number;
+        if (idx === BL_FLUSH) this.status.render();
+        else if (idx === BL_RESET) {
+          /* redisplay handled on next FLUSH */
+        } else if (idx === BL_CONDITION) {
+          if (ptr) this.status.setCondition(this.mod.getValue(ptr, "i32"));
+        } else if (ptr) {
+          this.status.update(idx, this.mod.UTF8ToString(ptr));
+        }
+        return;
+      }
+
       // Known-but-ignored for now.
       case "shim_init_nhwindows":
       case "shim_askname":
@@ -230,8 +248,6 @@ export class NetHackUI {
       case "shim_change_background":
       case "shim_preference_update":
       case "shim_status_init":
-      case "shim_status_enablefield":
-      case "shim_status_update":
       case "shim_update_inventory":
         return;
 

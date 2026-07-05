@@ -62,7 +62,7 @@ async function boot(): Promise<void> {
         // Menus (Phase 2) now handle the tutorial prompt; flip !tutorial off to
         // show the real 5.0 tutorial menu on new games.
         m.ENV.NETHACKOPTIONS =
-          "role:Valkyrie,race:human,gender:female,align:lawful,!tutorial,!legacy";
+          "role:Valkyrie,race:human,gender:female,align:lawful,!tutorial,!legacy,time,showexp";
       },
     ],
   };
