@@ -13,7 +13,7 @@
 import type { NetHackModule } from "./emscripten";
 import { InputQueue } from "./input";
 import type { TileRenderer } from "./tiles";
-import type { MenuController, MenuItem } from "./menu";
+import type { MenuController, MenuItem, PermInventPanel } from "./menu";
 import type { PromptController } from "./prompt";
 import type { Storage } from "./persistence";
 import type { TextWindowController } from "./textwindow";
@@ -21,6 +21,9 @@ import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
 
 // include/wintype.h
 const NHW = { MESSAGE: 1, STATUS: 2, MAP: 3, MENU: 4, TEXT: 5, PERMINVENT: 6 } as const;
+// include/wintype.h: signals perm_invent on start_menu; WIN_INVEN is otherwise
+// an ordinary NHW_MENU (never actually typed NHW_PERMINVENT in practice).
+const MENU_BEHAVE_PERMINV = 0x1;
 
 // glyph_info layout (include/wintype.h): int glyph @0; int ttychar @4; ...
 const GLYPHINFO_GLYPH_OFFSET = 0;
@@ -37,6 +40,7 @@ export class NetHackUI {
   private dom!: Dom;
   private renderer!: TileRenderer;
   private menuCtl!: MenuController;
+  private permInvent!: PermInventPanel;
   private promptCtl!: PromptController;
   private storage!: Storage;
   private textWinCtl!: TextWindowController;
@@ -44,7 +48,7 @@ export class NetHackUI {
 
   private windowType = new Map<number, number>();
   private nextWinid = 1;
-  private menus = new Map<number, { items: MenuItem[]; prompt: string }>();
+  private menus = new Map<number, { items: MenuItem[]; prompt: string; permInvent: boolean }>();
   private textBuffers = new Map<number, string[]>();
 
   private seenProcs = new Set<string>();
@@ -57,6 +61,7 @@ export class NetHackUI {
     promptCtl: PromptController,
     storage: Storage,
     textWinCtl: TextWindowController,
+    permInvent: PermInventPanel,
   ): void {
     this.mod = mod;
     this.dom = dom;
@@ -65,6 +70,7 @@ export class NetHackUI {
     this.promptCtl = promptCtl;
     this.storage = storage;
     this.textWinCtl = textWinCtl;
+    this.permInvent = permInvent;
     this.status = new StatusBar(dom.status);
   }
 
@@ -188,7 +194,12 @@ export class NetHackUI {
         return true; // let the generic setup honor our pre-selected character
 
       case "shim_start_menu": {
-        this.menus.set(args[0] as number, { items: [], prompt: "" });
+        const mbehavior = args[1] as number;
+        this.menus.set(args[0] as number, {
+          items: [],
+          prompt: "",
+          permInvent: mbehavior === MENU_BEHAVE_PERMINV,
+        });
         return;
       }
       case "shim_add_menu": {
@@ -217,9 +228,20 @@ export class NetHackUI {
         const window = args[0] as number;
         const how = args[1] as number;
         const menuListPtr = args[2] as number;
-        const menu = this.menus.get(window) ?? { items: [], prompt: "" };
-        const picks = await this.menuCtl.show(menu.prompt, menu.items, how);
+        const menu = this.menus.get(window) ?? { items: [], prompt: "", permInvent: false };
         this.menus.delete(window);
+
+        // perm_invent: signaled by MENU_BEHAVE_PERMINV on start_menu (WIN_INVEN
+        // is a perfectly ordinary NHW_MENU otherwise) — a passive, always-visible
+        // panel, never a blocking modal. The core repopulates it on every
+        // inventory change with want_reply=FALSE and expects no selection back.
+        if (menu.permInvent) {
+          this.permInvent.render(menu.items);
+          if (menuListPtr) this.mod.setValue(menuListPtr, 0, "i32");
+          return 0;
+        }
+
+        const picks = await this.menuCtl.show(menu.prompt, menu.items, how);
 
         if (picks.length === 0) {
           if (menuListPtr) this.mod.setValue(menuListPtr, 0, "i32");

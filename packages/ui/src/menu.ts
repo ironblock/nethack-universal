@@ -147,6 +147,55 @@ export class MenuController {
   }
 }
 
+/**
+ * Docked, always-visible inventory panel (the `perm_invent` option). Unlike
+ * MenuController, this never blocks: NetHack repopulates it silently on every
+ * inventory change (see repopulate_perminvent, called with want_reply=FALSE,
+ * i.e. PICK_NONE) and expects no reply.
+ */
+export class PermInventPanel {
+  constructor(
+    private container: HTMLElement,
+    private renderer: TileRenderer,
+  ) {}
+
+  render(items: MenuItem[]): void {
+    const frag = document.createDocumentFragment();
+    const title = document.createElement("div");
+    title.className = "menu-title";
+    title.textContent = "Inventory";
+    frag.appendChild(title);
+
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = item.selectable ? "menu-row" : "menu-row header";
+
+      if (item.glyph >= 0) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 24;
+        canvas.height = 24;
+        canvas.className = "menu-tile";
+        const ctx = canvas.getContext("2d");
+        if (ctx && this.renderer.blit(ctx, item.glyph, 0, 0, 24)) row.appendChild(canvas);
+      }
+      if (item.selectable) {
+        const key = document.createElement("span");
+        key.className = "menu-accel";
+        key.textContent = String.fromCharCode(item.accel);
+        row.appendChild(key);
+      }
+
+      const text = document.createElement("span");
+      text.className = "menu-text";
+      text.textContent = item.text;
+      row.appendChild(text);
+      frag.appendChild(row);
+    }
+
+    this.container.replaceChildren(frag);
+  }
+}
+
 /** Assign a-zA-Z accelerators to selectable items that didn't come with one. */
 function assignAccelerators(items: MenuItem[]): void {
   const used = new Set<number>();
