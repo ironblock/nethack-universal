@@ -14,6 +14,7 @@ import { attachKeyboard } from "./input";
 import { TileRenderer } from "./tiles";
 import { MenuController } from "./menu";
 import { PromptController } from "./prompt";
+import { IdbfsStorage } from "./persistence";
 
 const CALLBACK_NAME = "nethackCallback";
 
@@ -72,7 +73,15 @@ async function boot(): Promise<void> {
   };
 
   const m = await factory(mod);
-  ui.bind(m, dom, renderer, menuCtl, promptCtl);
+
+  // Mount persistent storage and load any saved game BEFORE main() runs, so the
+  // core finds an existing save under our player name and offers to restore it.
+  const storage = new IdbfsStorage(m);
+  storage.mount();
+  await storage.load();
+  window.addEventListener("pagehide", () => void storage.save());
+
+  ui.bind(m, dom, renderer, menuCtl, promptCtl, storage);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 

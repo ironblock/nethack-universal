@@ -15,6 +15,7 @@ import { InputQueue } from "./input";
 import type { TileRenderer } from "./tiles";
 import type { MenuController, MenuItem } from "./menu";
 import type { PromptController } from "./prompt";
+import type { Storage } from "./persistence";
 import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
 
 // include/wintype.h
@@ -36,6 +37,7 @@ export class NetHackUI {
   private renderer!: TileRenderer;
   private menuCtl!: MenuController;
   private promptCtl!: PromptController;
+  private storage!: Storage;
   private status!: StatusBar;
 
   private windowType = new Map<number, number>();
@@ -50,12 +52,14 @@ export class NetHackUI {
     renderer: TileRenderer,
     menuCtl: MenuController,
     promptCtl: PromptController,
+    storage: Storage,
   ): void {
     this.mod = mod;
     this.dom = dom;
     this.renderer = renderer;
     this.menuCtl = menuCtl;
     this.promptCtl = promptCtl;
+    this.storage = storage;
     this.status = new StatusBar(dom.status);
   }
 
@@ -253,11 +257,15 @@ export class NetHackUI {
         return;
       }
 
+      case "shim_exit_nhwindows":
+        // Game is ending (save / quit / death) — flush the save/record to IndexedDB.
+        await this.storage.save();
+        return;
+
       // Known-but-ignored for now.
       case "shim_init_nhwindows":
       case "shim_askname":
       case "shim_get_nh_event":
-      case "shim_exit_nhwindows":
       case "shim_suspend_nhwindows":
       case "shim_resume_nhwindows":
       case "shim_display_file":

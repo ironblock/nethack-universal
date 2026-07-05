@@ -1,7 +1,34 @@
 diff --git a/sys/libnh/libnhmain.c b/sys/libnh/libnhmain.c
-index f974bc4..385a264 100644
+index f974bc4..65d8eff 100644
 --- a/sys/libnh/libnhmain.c
 +++ b/sys/libnh/libnhmain.c
+@@ -35,7 +35,7 @@ extern struct passwd *getpwuid, (int);
+ #endif
+ extern struct passwd *getpwnam(const char *);
+ #ifdef CHDIR
+-static void chdirx(const char *, boolean);
++void chdirx(const char *, boolean);
+ #endif /* CHDIR */
+ static boolean whoami(void);
+ static void process_options(int, char **);
+@@ -110,7 +110,7 @@ nhmain(int argc, char *argv[])
+ 
+         if (argcheck(argc, argv, ARG_SHOWPATHS) == 2) {
+             gd.deferred_showpaths = TRUE;
+-            return;
++            return 0;
+         }
+         if (argcheck(argc, argv, ARG_DEBUG) == 1) {
+             argc--;
+@@ -458,7 +458,7 @@ process_options(int argc, char *argv[])
+ }
+ 
+ #ifdef CHDIR
+-static void
++void
+ chdirx(const char *dir, boolean wr)
+ {
+     if (dir /* User specified directory? */
 @@ -781,18 +781,30 @@ opt_terminate(void)
      /*NOTREACHED*/
  }
@@ -45,7 +72,7 @@ index f974bc4..385a264 100644
  
  #ifdef __EMSCRIPTEN__
 diff --git a/sys/unix/hints/include/cross-pre2.500 b/sys/unix/hints/include/cross-pre2.500
-index ddc3ba7..f3ad17a 100644
+index ddc3ba7..26c02f7 100644
 --- a/sys/unix/hints/include/cross-pre2.500
 +++ b/sys/unix/hints/include/cross-pre2.500
 @@ -282,7 +282,7 @@ EMCC_LFLAGS += -s MODULARIZE
@@ -70,3 +97,28 @@ index ddc3ba7..f3ad17a 100644
  EMCC_CFLAGS += -DNO_SIGNAL
  #EMCC_CFLAGS += -s DISABLE_EXCEPTION_CATCHING=0
  EMCC_DEBUG_LFLAGS += -s ASSERTIONS=1
+@@ -334,7 +338,24 @@ WASM_CFLAGS += -DSYSCF -DSYSCF_FILE=\"/sysconf\" -DSECURE
+ WASM_CFLAGS += -I../include -DNOTPARMDECL
+ # NetHack sources control
+ WASM_CFLAGS += -DDLB
++# nethack-universal: redirect all read-write files (save/level/bones/lock/score)
++# to a single dir we mount as IDBFS in the browser for persistence; datadir
++# (nhdat) stays at HACKDIR. This needs CHDIR (config.h disables it whenever
++# SHIM_GRAPHICS is defined — chdirx()/fqn_prefix are simply never exercised
++# otherwise); PREFIXES_IN_USE (fqname() is an unconditional no-op without it, on
++# every platform, not just wasm) is then auto-defined by include/hack.h because
++# VAR_PLAYGROUND is set. dir == HACKDIR == "/" so the chdir("/") chdirx makes is
++# a no-op; only the fqn_prefix side effect matters to us.
++WASM_CFLAGS += -DCHDIR
++WASM_CFLAGS += -DVAR_PLAYGROUND=\"/nethack-data\"
+ WASM_CFLAGS += -DHACKDIR=\"$(HACKDIR)\"
++# nethack-universal: HACKDIR above resolves to the HOST build machine's path
++# (from the Makefile $(HACKDIR) variable) — meaningless at WASM runtime, and
++# fatal here: chdirx() compares it against our runtime NETHACKDIR="/" env var
++# via strcmp to decide whether to apply VAR_PLAYGROUND, so a mismatched value
++# silently skips persistence setup entirely. Override to match; a later -D for
++# the same macro wins over the earlier one on the same compiler invocation.
++WASM_CFLAGS += -DHACKDIR=\"/\"
+ WASM_CFLAGS += -DDEFAULT_WINDOW_SYS=\"shim\" \
+ #override TARGET_CFLAGS += -DGREPPATH=\"/usr/bin/grep\"
+ WASM_CFLAGS += -DNOMAIL
