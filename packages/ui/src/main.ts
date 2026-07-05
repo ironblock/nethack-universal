@@ -12,6 +12,7 @@ import type { NetHackFactory, NetHackModule } from "./emscripten";
 import { NetHackUI } from "./nethack";
 import { attachKeyboard } from "./input";
 import { TileRenderer } from "./tiles";
+import { MenuController } from "./menu";
 
 const CALLBACK_NAME = "nethackCallback";
 
@@ -24,6 +25,8 @@ async function boot(): Promise<void> {
   const renderer = new TileRenderer();
   await renderer.load();
   renderer.attach(byId("map") as HTMLCanvasElement);
+
+  const menuCtl = new MenuController(byId("overlay"), renderer);
 
   const ui = new NetHackUI();
   // The shim looks up the callback by name on globalThis.
@@ -56,6 +59,8 @@ async function boot(): Promise<void> {
         // Fully specify the character AND disable the 5.0 tutorial prompt — it's
         // a forced PICK_ONE menu that would loop until we implement real menu
         // selection (Phase 2). !legacy skips the intro poem's --More--.
+        // Menus (Phase 2) now handle the tutorial prompt; flip !tutorial off to
+        // show the real 5.0 tutorial menu on new games.
         m.ENV.NETHACKOPTIONS =
           "role:Valkyrie,race:human,gender:female,align:lawful,!tutorial,!legacy";
       },
@@ -63,7 +68,7 @@ async function boot(): Promise<void> {
   };
 
   const m = await factory(mod);
-  ui.bind(m, dom, renderer);
+  ui.bind(m, dom, renderer, menuCtl);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 

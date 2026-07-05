@@ -73,12 +73,18 @@ export class TileRenderer {
   /** Draw the tile for `glyph` at map cell (x, y). */
   drawGlyph(x: number, y: number, glyph: number): void {
     if (x < 0 || x >= COLNO || y < 0 || y >= ROWNO) return;
+    this.blit(this.ctx, glyph, x * this.renderSize, y * this.renderSize, this.renderSize);
+  }
+
+  /** Blit the tile for `glyph` into any 2d context at (dx, dy), scaled to `size`. */
+  blit(ctx: CanvasRenderingContext2D, glyph: number, dx: number, dy: number, size: number): boolean {
     const tile = this.glyph2tile[glyph];
-    if (tile === undefined) return;
+    if (tile === undefined) return false;
     const sx = (tile % this.meta.cols) * this.tile;
     const sy = Math.floor(tile / this.meta.cols) * this.tile;
-    const d = this.renderSize;
-    this.ctx.drawImage(this.sheet, sx, sy, this.tile, this.tile, x * d, y * d, d, d);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.sheet, sx, sy, this.tile, this.tile, dx, dy, size, size);
+    return true;
   }
 }
 

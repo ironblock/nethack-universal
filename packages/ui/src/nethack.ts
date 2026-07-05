@@ -13,6 +13,7 @@
 import type { NetHackModule } from "./emscripten";
 import { InputQueue } from "./input";
 import type { TileRenderer } from "./tiles";
+import type { MenuController, MenuItem } from "./menu";
 
 // include/wintype.h
 const NHW = { MESSAGE: 1, STATUS: 2, MAP: 3, MENU: 4, TEXT: 5, PERMINVENT: 6 } as const;
@@ -31,16 +32,19 @@ export class NetHackUI {
   private mod!: NetHackModule;
   private dom!: Dom;
   private renderer!: TileRenderer;
+  private menuCtl!: MenuController;
 
   private windowType = new Map<number, number>();
   private nextWinid = 1;
+  private menus = new Map<number, { items: MenuItem[]; prompt: string }>();
 
   private seenProcs = new Set<string>();
 
-  bind(mod: NetHackModule, dom: Dom, renderer: TileRenderer): void {
+  bind(mod: NetHackModule, dom: Dom, renderer: TileRenderer, menuCtl: MenuController): void {
     this.mod = mod;
     this.dom = dom;
     this.renderer = renderer;
+    this.menuCtl = menuCtl;
   }
 
   /** Set true to trace every window-proc call to the console (capped). */
@@ -134,10 +138,56 @@ export class NetHackUI {
       case "shim_player_selection_or_tty":
         return true; // let the generic setup honor our pre-selected character
 
+      case "shim_start_menu": {
+        this.menus.set(args[0] as number, { items: [], prompt: "" });
+        return;
+      }
+      case "shim_add_menu": {
+        const menu = this.menus.get(args[0] as number);
+        if (menu) {
+          const glyphinfo = args[1] as number;
+          const identifier = args[2] as number; // fmt 'i' → low 32 bits of anything
+          const glyph = glyphinfo ? this.mod.getValue(glyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32") : -1;
+          menu.items.push({
+            identifier,
+            accel: args[3] as number,
+            glyph,
+            text: (args[7] as string) ?? "",
+            selectable: identifier !== 0, // zero identifier = header/text line
+            preselected: false,
+          });
+        }
+        return;
+      }
+      case "shim_end_menu": {
+        const menu = this.menus.get(args[0] as number);
+        if (menu) menu.prompt = (args[1] as string) ?? "";
+        return;
+      }
       case "shim_select_menu": {
+        const window = args[0] as number;
+        const how = args[1] as number;
         const menuListPtr = args[2] as number;
-        if (menuListPtr) this.mod.setValue(menuListPtr, 0, "i32");
-        return 0; // nothing selected
+        const menu = this.menus.get(window) ?? { items: [], prompt: "" };
+        const picks = await this.menuCtl.show(menu.prompt, menu.items, how);
+        this.menus.delete(window);
+
+        if (picks.length === 0) {
+          if (menuListPtr) this.mod.setValue(menuListPtr, 0, "i32");
+          return 0;
+        }
+        // Allocate a menu_item[] the core will free: { anything(8), long count(4), uint flags(4) }.
+        const ITEM_SIZE = 16;
+        const arr = this.mod._malloc(picks.length * ITEM_SIZE);
+        picks.forEach((p, i) => {
+          const base = arr + i * ITEM_SIZE;
+          this.mod.setValue(base, p.identifier, "i32"); // anything low word (a_int / ptr)
+          this.mod.setValue(base + 4, 0, "i32"); // anything high word
+          this.mod.setValue(base + 8, p.count, "i32"); // long count
+          this.mod.setValue(base + 12, 0, "i32"); // itemflags
+        });
+        if (menuListPtr) this.mod.setValue(menuListPtr, arr, "i32");
+        return picks.length;
       }
       case "shim_message_menu":
         return args[0] as number; // return the offered letter unchanged
@@ -170,9 +220,6 @@ export class NetHackUI {
       case "shim_suspend_nhwindows":
       case "shim_resume_nhwindows":
       case "shim_display_file":
-      case "shim_start_menu":
-      case "shim_add_menu":
-      case "shim_end_menu":
       case "shim_mark_synch":
       case "shim_wait_synch":
       case "shim_update_positionbar":

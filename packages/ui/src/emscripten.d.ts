@@ -12,6 +12,7 @@ export interface NetHackModule {
 
   ENV: Record<string, string>;
   FS: any;
+  _malloc: (size: number) => number;
   ccall: (name: string, ret: string | null, argTypes: string[], args: unknown[]) => unknown;
   getValue: (ptr: number, type: string) => number;
   setValue: (ptr: number, value: number, type: string) => void;
