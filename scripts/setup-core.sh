@@ -41,4 +41,7 @@ fi
 echo ">> Generating tile assets"
 bash "$ROOT/packages/core-wasm/gen-tiles.sh"
 
+echo ">> Generating extended-command list"
+bash "$ROOT/packages/core-wasm/gen-extcmds.sh"
+
 echo ">> Core prep complete. Now run: npm run build:core"

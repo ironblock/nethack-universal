@@ -76,3 +76,27 @@ DevTeam's toolchain and the libnh port had latent gaps:
    shared `earlyarg.c`) that newer wasm-ld rejects, and added the missing
    `get_nhuuid`/`free_nhuuid` stubs the core calls unconditionally (the libnh main
    never defined them, so the game trapped at startup).
+5. **`-DCHDIR` / `-DVAR_PLAYGROUND` / `-DHACKDIR="/"`** (twice, later wins) —
+   redirect save/level/bones/lock/record to an IDBFS-mounted directory for
+   browser persistence. See `packages/ui/src/persistence.ts`.
+
+## Generated assets (not hand-maintained, not part of the patch)
+
+Two browser assets are derived from `vendor/nethack/src/*.c` at prep time and
+regenerated whenever the submodule/patch changes — neither requires touching
+core source:
+
+- **Tiles** (`packages/core-wasm/gen-tiles.sh`): builds the host `tilemap`/
+  `tile2bmp` tools from `src/tile.c`, renders `nhtiles.bmp`, and converts to
+  `packages/ui/public/tiles/{tiles.png,glyph2tile.json,meta.json}`.
+- **Extended commands** (`packages/core-wasm/gen-extcmds.sh`): preprocesses
+  `src/cmd.c` with the exact defines the WASM build uses (so `CMD_NOT_AVAILABLE`
+  reflects our environment, e.g. no real `SUSPEND`/`SHELL`) and parses the
+  macro-expanded `extcmdlist[]` literal into `packages/ui/public/extcmds.json`.
+  The UI's `#`-command palette (`packages/ui/src/extcmd.ts`) filters and
+  displays this list; `get_ext_cmd`'s return value is the raw array index,
+  which core dispatches itself — the JS side never needs to know what a
+  command *does*, only its name/description/flags.
+
+Both scripts are run by `scripts/setup-core.sh`; re-run them manually after
+pulling a submodule update if you skip the full prep script.

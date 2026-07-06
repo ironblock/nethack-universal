@@ -34,3 +34,6 @@ packages/ui/public/core/
 
 # Generated tile assets (produced by tools/gen-tiles.mjs)
 packages/ui/public/tiles/
+
+# Generated extended-command list (produced by gen-extcmds.sh)
+packages/ui/public/extcmds.json

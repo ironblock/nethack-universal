@@ -17,6 +17,7 @@ import type { MenuController, MenuItem, PermInventPanel } from "./menu";
 import type { PromptController } from "./prompt";
 import type { Storage } from "./persistence";
 import type { TextWindowController } from "./textwindow";
+import type { ExtCmdController } from "./extcmd";
 import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
 
 // include/wintype.h
@@ -44,6 +45,7 @@ export class NetHackUI {
   private promptCtl!: PromptController;
   private storage!: Storage;
   private textWinCtl!: TextWindowController;
+  private extCmdCtl!: ExtCmdController;
   private status!: StatusBar;
 
   private windowType = new Map<number, number>();
@@ -62,6 +64,7 @@ export class NetHackUI {
     storage: Storage,
     textWinCtl: TextWindowController,
     permInvent: PermInventPanel,
+    extCmdCtl: ExtCmdController,
   ): void {
     this.mod = mod;
     this.dom = dom;
@@ -71,6 +74,7 @@ export class NetHackUI {
     this.storage = storage;
     this.textWinCtl = textWinCtl;
     this.permInvent = permInvent;
+    this.extCmdCtl = extCmdCtl;
     this.status = new StatusBar(dom.status);
   }
 
@@ -267,8 +271,9 @@ export class NetHackUI {
       case "shim_get_color_string":
         return "";
       case "shim_doprev_message":
-      case "shim_get_ext_cmd":
         return -1;
+      case "shim_get_ext_cmd":
+        return this.extCmdCtl.choose();
       case "set_shim_font_name":
         return 0;
 

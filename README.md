@@ -30,7 +30,8 @@ see [packages/core-wasm/README.md](packages/core-wasm/README.md).
 - `patches/` — our source changes, applied on top of the pristine submodule.
 - `scripts/setup-core.sh` — one-time core prep (submodule + patch + setup + Lua).
 - `packages/core-wasm/` — build wrapper that produces `nethack.js` / `nethack.wasm`.
-- `packages/ui/` — the TypeScript UI (Vite). Phase-0 harness today; Phases 1–3 next.
+- `packages/ui/` — the TypeScript UI (Vite): tiles, menus, status HUD, prompts,
+  persistence, and extended-command entry.
 
 ## Getting started
 
@@ -47,14 +48,28 @@ npm run dev -w @nethack-universal/ui              # http://localhost:5173
 
 ## Status
 
-**Phases 0–1 complete** — the 5.0.0 core compiles to WASM, boots in the browser,
-renders **graphical tiles** to a canvas (the shipped 5.0 tileset, 2303 tiles incl.
-statues), runs the real move loop, follows the hero, and responds to input (blocking
-input via Asyncify). Tile assets are generated from source by
-`packages/core-wasm/gen-tiles.sh` (host `tilemap`/`tile2bmp` → PNG + `glyph2tile.json`).
+**Phases 0–3 complete**, plus most of the Qt-parity pass:
 
-Next: clickable menus/inventory and mouse (Phase 2), then persistence/options (Phase 3),
-then the Tauri desktop shell (Phase 4).
+- Core compiles to WASM, boots in the browser, renders **graphical tiles** (the
+  shipped 5.0 tileset) to canvas, and drives blocking input via Asyncify.
+- Clickable menus (inventory, selection, category headers, paging), a docked
+  always-visible `perm_invent` panel, mouse click-to-travel/look, interactive
+  y/n and text prompts, and a two-line status HUD.
+- Full save/resume via IndexedDB (IDBFS).
+- **`#` extended-command entry** with typed-prefix autocomplete (mirrors the Qt
+  port's behavior — unambiguous prefixes select immediately) — this unlocks
+  everything else routed through NetHack's generic menu system for free,
+  including the in-game **options editor** (`#optionsfull`), `#overview`,
+  `#terrain`, `#conduct`, `#version`, and dozens more. The command list itself
+  is generated at build time from `src/cmd.c`'s `extcmdlist[]`
+  (`packages/core-wasm/gen-extcmds.sh`), not hand-maintained.
+
+Remaining for full Qt parity: adjustable tile size, runtime tileset switching,
+and matching Qt's attribute/alignment/condition icon set (Qt ships these as
+XPMs in `win/Qt/qt_xpms.h` — same license, straightforward to port).
+
+Next: Tauri desktop shell (Phase 4) — `packages/ui/src/persistence.ts`'s
+`Storage` interface is already abstracted for a real-filesystem swap.
 
 ## Licensing
 
