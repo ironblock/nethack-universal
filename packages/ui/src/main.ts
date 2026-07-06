@@ -16,6 +16,7 @@ import { MenuController, PermInventPanel } from "./menu";
 import { PaperdollPanel } from "./paperdoll";
 import { PromptController } from "./prompt";
 import { IdbfsStorage } from "./persistence";
+import { SaveSelectController } from "./saveselect";
 import { TextWindowController } from "./textwindow";
 import { TombstoneController } from "./tombstone";
 import { ExtCmdController } from "./extcmd";
@@ -36,7 +37,7 @@ const FONT_SIZES: Array<[label: string, px: number]> = [
 const CALLBACK_NAME = "nethackCallback";
 
 async function boot(): Promise<void> {
-  wireSplashScreen();
+  const dismissSplash = wireSplashScreen();
 
   const dom = {
     messages: byId("messages"),
@@ -90,7 +91,7 @@ async function boot(): Promise<void> {
         const m = mod as NetHackModule;
         m.ENV.NETHACKDIR = "/"; // embedded data (nhdat, sysconf) is at FS root
         m.ENV.HACKDIR = "/";
-        m.ENV.USER = "Adventurer";
+        m.ENV.USER = "Adventurer"; // placeholder; overwritten after the save-select screen
         // Fully specify the character AND disable the 5.0 tutorial prompt — it's
         // a forced PICK_ONE menu that would loop until we implement real menu
         // selection (Phase 2). !legacy skips the intro poem's --More--.
@@ -114,13 +115,22 @@ async function boot(): Promise<void> {
   await storage.load();
   window.addEventListener("pagehide", () => void storage.save());
 
+  // Qt's qt_svsel.cpp: pick an existing saved adventurer to resume, or start a
+  // new one. Saves are parsed from "<uid><plname>" filenames (files.c
+  // set_savefile_name) — our WASM build has a fixed uid, so it's just a
+  // leading digit run to strip.
+  dismissSplash();
+  const saveSelectCtl = new SaveSelectController(byId("saveselect"));
+  const playerName = await saveSelectCtl.choose(storage.listSaves());
+  m.ENV.USER = playerName;
+
   ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl, statusIcons, tombstoneCtl, paperdoll);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 
   // Asyncify: callMain returns as soon as the core suspends for input.
   try {
-    m.callMain(["-u", "Adventurer"]);
+    m.callMain(["-u", playerName]);
   } catch (e) {
     if (!isExitStatus(e)) throw e;
   }
@@ -195,9 +205,12 @@ function wireStatusLayoutControl(ui: NetHackUI): void {
 }
 
 /** Qt shows a version/attribution splash at startup and character select. */
-function wireSplashScreen(): void {
+function wireSplashScreen(): () => void {
   const splash = byId("splash");
+  let dismissed = false;
   const dismiss = () => {
+    if (dismissed) return;
+    dismissed = true;
     splash.classList.add("hidden");
     window.removeEventListener("keydown", dismiss, true);
     window.removeEventListener("click", dismiss, true);
@@ -205,6 +218,7 @@ function wireSplashScreen(): void {
   };
   window.addEventListener("keydown", dismiss, true);
   window.addEventListener("click", dismiss, true);
+  return dismiss;
 }
 
 boot().catch((err) => {

@@ -14,6 +14,8 @@ export interface Storage {
   load(): Promise<void>;
   /** Flush the in-memory FS to durable storage (call after a save/quit/death). */
   save(): Promise<void>;
+  /** Player names with an existing save (for a save-slot picker à la Qt's qt_svsel.cpp). */
+  listSaves(): string[];
 }
 
 /** IDBFS-backed storage for the browser. */
@@ -46,6 +48,19 @@ export class IdbfsStorage implements Storage {
 
   save(): Promise<void> {
     return this.syncfs(false);
+  }
+
+  /** Player names with an existing save, parsed from "<uid><plname>" filenames. */
+  listSaves(): string[] {
+    try {
+      const entries: string[] = this.mod.FS.readdir(`${PLAYGROUND}/save`);
+      return entries
+        .filter((e) => e !== "." && e !== "..")
+        .map((e) => e.replace(/^\d+/, ""))
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
   }
 
   private syncfs(populate: boolean): Promise<void> {

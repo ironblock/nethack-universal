@@ -294,6 +294,61 @@
         0%, 100% { opacity: 0.4; }
         50% { opacity: 1; }
       }
+
+      /* Save-slot picker (qt_svsel.cpp) */
+      #saveselect {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 15;
+        align-items: center;
+        justify-content: center;
+        background: rgba(5, 8, 5, 0.92);
+      }
+      .saveselect {
+        background: #161616;
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 24px 28px;
+        min-width: 320px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        align-items: stretch;
+      }
+      .saveselect h2 { margin: 0 0 4px; color: #e9c46a; font-size: 1.2em; text-align: center; }
+      .saveselect-list { display: flex; flex-direction: column; gap: 6px; }
+      .saveselect-btn {
+        background: #232323;
+        border: 1px solid #3a3a3a;
+        color: #cdc;
+        border-radius: 4px;
+        padding: 8px 12px;
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+      .saveselect-btn:hover { background: #35406a; }
+      .saveselect-new { display: flex; gap: 8px; border-top: 1px solid #2a2a2a; padding-top: 12px; }
+      .saveselect-new input {
+        flex: 1;
+        background: #0c0c0c;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #eee;
+        font: inherit;
+        padding: 6px 8px;
+      }
+      .saveselect-new button {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        color: #cdc;
+        border-radius: 4px;
+        padding: 6px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .saveselect-new button:hover { background: #35406a; }
     </style>
   </head>
   <body>
@@ -327,6 +382,7 @@
     </div>
     <div id="messages"></div>
     <div id="overlay"></div>
+    <div id="saveselect"></div>
     <div id="splash">
       <h1>NetHack</h1>
       <div class="tag">universal</div>
