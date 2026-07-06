@@ -131,6 +131,16 @@ export function attachKeyboard(queue: InputQueue): void {
       return;
     }
 
+    // Qt's function-key macros (qt_main.cpp keyPressEvent): F1 rests 100
+    // turns, F2 searches 20 times, Tab repeats the previous command (^A).
+    const MACROS: Record<string, string> = { F1: "100.", F2: "20s", Tab: "\x01" };
+    const macro = MACROS[e.key];
+    if (macro) {
+      e.preventDefault();
+      for (const ch of macro) queue.pushKey(ch.charCodeAt(0));
+      return;
+    }
+
     // PageUp/PageDown scroll the message log (Qt's global key handling).
     if (e.key === "PageUp" || e.key === "PageDown") {
       const log = document.getElementById("messages");
@@ -159,6 +169,14 @@ export function attachKeyboard(queue: InputQueue): void {
         if (c >= 97 && c <= 122) {
           e.preventDefault();
           return queue.pushKey(c - 96);
+        }
+      }
+      // Alt+letter → meta-encoded command (M-x; cmd.c strips the 0x80 bit).
+      if (e.altKey) {
+        const c = e.key.toLowerCase().charCodeAt(0);
+        if (c >= 97 && c <= 122) {
+          e.preventDefault();
+          return queue.pushKey(c | 0x80);
         }
       }
       queue.pushKey(e.key.charCodeAt(0));

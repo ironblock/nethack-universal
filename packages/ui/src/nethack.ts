@@ -230,7 +230,9 @@ export class NetHackUI {
         // toolbar dispatch is safe (Qt's ok_for_command analog).
         const [xPtr, yPtr, modPtr] = args as [number, number, number];
         this.awaitingCommand = true;
+        this.scheduleIdleFlush();
         const ev = await this.input.next();
+        this.cancelIdleFlush();
         this.awaitingCommand = false;
         // The player acted: messages logged so far stop being "new" once the
         // next one arrives (Qt's newest-message bold / turn unhighlight).
@@ -405,6 +407,12 @@ export class NetHackUI {
         await this.storage.save();
         return;
 
+      case "shim_delay_output":
+        // Animation pacing (explosions, thrown objects): Qt sleeps 50ms
+        // (qt_delay.cpp). Asyncify suspends cleanly on the awaited timer.
+        await new Promise((r) => setTimeout(r, 45));
+        return;
+
       // Known-but-ignored for now.
       case "shim_init_nhwindows":
       case "shim_askname":
@@ -416,7 +424,6 @@ export class NetHackUI {
       case "shim_update_positionbar":
       case "shim_nhbell":
       case "shim_number_pad":
-      case "shim_delay_output":
       case "shim_change_color":
       case "shim_change_background":
       case "shim_preference_update":
@@ -442,6 +449,32 @@ export class NetHackUI {
 
   /** Set by main.ts once the adventurer is chosen; keys history storage. */
   playerName = "";
+
+  // Idle checkpoint (qt_bind.cpp's IDLECHECKPOINT): after sitting at the
+  // command prompt for a while, flush the in-memory FS to IndexedDB so a tab
+  // crash or teardown race doesn't lose whatever the core has written
+  // (record, bones, a just-completed save racing pagehide). Rate-limited —
+  // syncfs isn't free.
+  private idleFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastIdleFlush = 0;
+  private static readonly IDLE_FLUSH_DELAY_MS = 10_000;
+  private static readonly IDLE_FLUSH_MIN_GAP_MS = 30_000;
+
+  private scheduleIdleFlush(): void {
+    if (this.idleFlushTimer !== null) return;
+    if (Date.now() - this.lastIdleFlush < NetHackUI.IDLE_FLUSH_MIN_GAP_MS) return;
+    this.idleFlushTimer = setTimeout(() => {
+      this.idleFlushTimer = null;
+      this.lastIdleFlush = Date.now();
+      void this.storage.save();
+    }, NetHackUI.IDLE_FLUSH_DELAY_MS);
+  }
+
+  private cancelIdleFlush(): void {
+    if (this.idleFlushTimer === null) return;
+    clearTimeout(this.idleFlushTimer);
+    this.idleFlushTimer = null;
+  }
 
   private historyKey(): string {
     return `nhu.msghist.${this.playerName}`;
