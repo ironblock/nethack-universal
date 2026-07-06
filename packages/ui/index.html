@@ -199,6 +199,42 @@
         overflow-y: auto;
       }
 
+      /* Graphical tombstone (qt_rip.cpp / win/X11/rip.xpm) */
+      .tombstone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .tombstone-stage {
+        position: relative;
+        width: min(90vw, 800px);
+      }
+      .tombstone-img {
+        width: 100%;
+        image-rendering: pixelated;
+        display: block;
+        border-radius: 4px;
+      }
+      .tombstone-text {
+        position: absolute;
+        width: 26%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        font-family: Georgia, "Times New Roman", serif;
+        color: #2a2620;
+        pointer-events: none;
+      }
+      .tombstone-text div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: clamp(7px, 1.6vw, 13px);
+        white-space: nowrap;
+      }
+      .tombstone-footer { color: #889; }
+
       /* Splash screen (Qt shows a title/version splash at startup and character select) */
       #splash {
         position: fixed;

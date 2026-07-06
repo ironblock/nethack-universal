@@ -50,4 +50,7 @@ node "$ROOT/packages/core-wasm/tools/gen-status-icons.mjs"
 echo ">> Generating map-cell marker icons (pet/pile, ported from qt_map.cpp)"
 node "$ROOT/packages/core-wasm/tools/gen-map-marks.mjs"
 
+echo ">> Generating tombstone image (ported from win/X11/rip.xpm)"
+node "$ROOT/packages/core-wasm/tools/gen-tombstone.mjs"
+
 echo ">> Core prep complete. Now run: npm run build:core"

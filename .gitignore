@@ -45,3 +45,7 @@ packages/ui/public/status-icons/
 # Generated map-cell marker icons (produced by gen-map-marks.mjs, ported from
 # the Qt port's pet_mark_xpm/pile_mark_xpm in qt_map.cpp)
 packages/ui/public/map-marks/
+
+# Generated tombstone image (produced by gen-tombstone.mjs, ported from
+# win/X11/rip.xpm — shared by the X11 and Qt ports)
+packages/ui/public/tombstone.png

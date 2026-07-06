@@ -16,6 +16,7 @@ import { MenuController, PermInventPanel } from "./menu";
 import { PromptController } from "./prompt";
 import { IdbfsStorage } from "./persistence";
 import { TextWindowController } from "./textwindow";
+import { TombstoneController } from "./tombstone";
 import { ExtCmdController } from "./extcmd";
 import { StatusIcons } from "./statusicons";
 import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
@@ -50,6 +51,7 @@ async function boot(): Promise<void> {
   const menuCtl = new MenuController(byId("overlay"), renderer);
   const promptCtl = new PromptController(byId("overlay"));
   const textWinCtl = new TextWindowController(byId("overlay"));
+  const tombstoneCtl = new TombstoneController(byId("overlay"));
   const permInvent = new PermInventPanel(byId("perminvent"), renderer);
   const extCmdCtl = new ExtCmdController(byId("overlay"));
   await extCmdCtl.load();
@@ -59,7 +61,7 @@ async function boot(): Promise<void> {
   const ui = new NetHackUI();
   // The shim looks up the callback by name on globalThis.
   (globalThis as Record<string, unknown>)[CALLBACK_NAME] = ui.callback;
-  (globalThis as Record<string, unknown>).__nh = { ui, renderer, menuCtl, promptCtl }; // debug handle
+  (globalThis as Record<string, unknown>).__nh = { ui, renderer, menuCtl, promptCtl, tombstoneCtl }; // debug handle
   attachKeyboard(ui.input);
   // Click a map cell to travel there (left) or look (right).
   renderer.onCellClick((x, y, button) => ui.input.push({ kind: "mouse", x, y, button }));
@@ -110,7 +112,7 @@ async function boot(): Promise<void> {
   await storage.load();
   window.addEventListener("pagehide", () => void storage.save());
 
-  ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl, statusIcons);
+  ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl, statusIcons, tombstoneCtl);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 

@@ -17,6 +17,7 @@ import type { MenuController, MenuItem, PermInventPanel } from "./menu";
 import type { PromptController } from "./prompt";
 import type { Storage } from "./persistence";
 import type { TextWindowController } from "./textwindow";
+import { TombstoneController } from "./tombstone";
 import type { ExtCmdController } from "./extcmd";
 import type { StatusIcons } from "./statusicons";
 import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
@@ -52,6 +53,7 @@ export class NetHackUI {
   private promptCtl!: PromptController;
   private storage!: Storage;
   private textWinCtl!: TextWindowController;
+  private tombstoneCtl!: TombstoneController;
   private extCmdCtl!: ExtCmdController;
   private status!: StatusBar;
 
@@ -73,6 +75,7 @@ export class NetHackUI {
     permInvent: PermInventPanel,
     extCmdCtl: ExtCmdController,
     statusIcons: StatusIcons,
+    tombstoneCtl: TombstoneController,
   ): void {
     this.mod = mod;
     this.dom = dom;
@@ -83,6 +86,7 @@ export class NetHackUI {
     this.textWinCtl = textWinCtl;
     this.permInvent = permInvent;
     this.extCmdCtl = extCmdCtl;
+    this.tombstoneCtl = tombstoneCtl;
     this.status = new StatusBar(dom.status, statusIcons);
   }
 
@@ -118,7 +122,10 @@ export class NetHackUI {
         const window = args[0] as number;
         if (this.windowType.get(window) === NHW.TEXT) {
           const lines = this.textBuffers.get(window);
-          if (lines?.length) await this.textWinCtl.show(lines);
+          if (lines?.length) {
+            if (TombstoneController.isTombstone(lines)) await this.tombstoneCtl.show(lines);
+            else await this.textWinCtl.show(lines);
+          }
         }
         return;
       }
