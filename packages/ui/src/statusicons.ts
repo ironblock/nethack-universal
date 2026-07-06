@@ -5,6 +5,8 @@
  * alignment, hunger, encumbrance, and status conditions — the icon set Qt
  * shows above each status label.
  */
+import { BASE_URL } from "./base";
+
 interface Manifest {
   size: number;
   cols: number;
@@ -17,8 +19,8 @@ export class StatusIcons {
 
   async load(): Promise<void> {
     const [manifest, sheet] = await Promise.all([
-      fetch("/status-icons/manifest.json").then((r) => r.json()) as Promise<Manifest>,
-      loadImage("/status-icons/sheet.png"),
+      fetch(`${BASE_URL}status-icons/manifest.json`).then((r) => r.json()) as Promise<Manifest>,
+      loadImage(`${BASE_URL}status-icons/sheet.png`),
     ]);
     this.manifest = manifest;
     this.sheet = sheet;

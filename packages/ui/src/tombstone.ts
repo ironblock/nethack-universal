@@ -5,6 +5,8 @@
  * lines — as an ordinary NHW_TEXT window; nethack.ts detects that content and
  * routes here instead of the plain-text TextWindowController.
  */
+import { BASE_URL } from "./base";
+
 const IMG_W = 400;
 const IMG_H = 200;
 // Qt's qt_rip.cpp: rip_text_x=156, rip_text_y=67, rip_text_h=94/riplines,
@@ -33,7 +35,7 @@ export class TombstoneController {
 
       const img = document.createElement("img");
       img.className = "tombstone-img";
-      img.src = "/tombstone.png";
+      img.src = `${BASE_URL}tombstone.png`;
       stage.appendChild(img);
 
       const textBox = document.createElement("div");

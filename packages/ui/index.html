@@ -63,6 +63,15 @@
         cursor: pointer;
       }
       #statuslayout button:hover { background: #35406a; }
+      #footer {
+        padding: 4px 10px;
+        background: #111;
+        border-top: 1px solid #222;
+        color: #556;
+        font-size: 11px;
+        text-align: center;
+      }
+      #footer a { color: #6a8; }
       :root { --hud-font-size: 14px; }
       #status { padding: 4px 10px; background: #161616; color: #cc9; min-height: 1em; font-size: var(--hud-font-size); }
       .status-line {
@@ -381,6 +390,11 @@
       </div>
     </div>
     <div id="messages"></div>
+    <footer id="footer">
+      NetHack is © the NetHack DevTeam, licensed under the
+      <a id="license-link" href="#" target="_blank" rel="noopener">NetHack General Public License</a>.
+      This is an unofficial, unaffiliated browser port.
+    </footer>
     <div id="overlay"></div>
     <div id="saveselect"></div>
     <div id="splash">

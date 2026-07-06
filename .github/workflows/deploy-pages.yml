@@ -1,0 +1,75 @@
+name: Deploy to GitHub Pages
+
+# Builds the WASM core from scratch (no build artifacts are committed — see
+# .gitignore) and publishes packages/ui/dist to GitHub Pages. This is a
+# project-page deploy (served from /<repo-name>/, not domain root), so the
+# UI build is passed --base=/<repo-name>/ to match; every runtime asset
+# fetch in packages/ui/src is prefixed with base.ts's BASE_URL for exactly
+# this reason.
+#
+# NOTE: the Linux build path (hints/linux.500) exercised here has not been
+# verified against a real CI run as of this writing — only hints/macOS.500
+# has actually been built and played. If this fails, start by comparing the
+# linux.500 vs macOS.500 hint file diffs and the emsdk version pin below
+# against ~/emsdk on a machine where the macOS build is known-good.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install C toolchain
+        run: sudo apt-get update && sudo apt-get install -y build-essential
+
+      # Pinned to the same version verified locally (see ~/emsdk/upstream/emscripten/emscripten-version.txt).
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.2
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Prep NetHack core (patch + configure + generate assets)
+        run: bash scripts/setup-core.sh
+
+      - name: Build NetHack core to WASM
+        run: npm run build:core
+
+      - name: Build UI (project-page base path)
+        run: npm run build -w @nethack-universal/ui -- --base=/${{ github.event.repository.name }}/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/ui/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

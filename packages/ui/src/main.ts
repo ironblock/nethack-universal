@@ -23,6 +23,7 @@ import { ExtCmdController } from "./extcmd";
 import { StatusIcons } from "./statusicons";
 import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
 import type { StatusLayout } from "./status";
+import { BASE_URL } from "./base";
 
 const TILE_SIZE_STEP = 8;
 // Qt's Settings dialog offers Tiny/Small/Medium/Large/Huge for message+status text.
@@ -38,6 +39,7 @@ const CALLBACK_NAME = "nethackCallback";
 
 async function boot(): Promise<void> {
   const dismissSplash = wireSplashScreen();
+  (byId("license-link") as HTMLAnchorElement).href = `${BASE_URL}LICENSE-NETHACK.txt`;
 
   const dom = {
     messages: byId("messages"),
@@ -76,14 +78,14 @@ async function boot(): Promise<void> {
   const nativeImport = new Function("u", "return import(u)") as (u: string) => Promise<{
     default: NetHackFactory;
   }>;
-  const { default: factory } = await nativeImport("/core/nethack.js");
+  const { default: factory } = await nativeImport(`${BASE_URL}core/nethack.js`);
 
   const mod: Partial<NetHackModule> = {
     // Don't auto-run main(); we start it ourselves after the callback is wired,
     // so the shim never sees a null callback (which would spin nhgetch and peg
     // the main thread instead of suspending via Asyncify).
     noInitialRun: true,
-    locateFile: (path) => `/core/${path}`,
+    locateFile: (path) => `${BASE_URL}core/${path}`,
     print: (s) => console.log("[nh stdout]", s),
     printErr: (s) => console.log("[nh stderr]", s),
     preRun: [

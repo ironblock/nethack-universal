@@ -49,3 +49,6 @@ packages/ui/public/map-marks/
 # Generated tombstone image (produced by gen-tombstone.mjs, ported from
 # win/X11/rip.xpm — shared by the X11 and Qt ports)
 packages/ui/public/tombstone.png
+
+# NGPL license text, copied from vendor/nethack/dat/license for in-app attribution
+packages/ui/public/LICENSE-NETHACK.txt

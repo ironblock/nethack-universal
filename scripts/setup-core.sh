@@ -28,9 +28,19 @@ fi
 
 # setup.sh generates src/Makefile from the (patched) hints, so it must run after
 # the patch. Re-run it if the Makefile is missing or the patch just landed.
+# The patch itself only touches sys/unix/hints/include/cross-pre2.500 (shared
+# by every top-level hint file), so any platform hint works with it unchanged.
+HINT="${NH_HINT:-}"
+if [ -z "$HINT" ]; then
+  case "$(uname -s)" in
+    Darwin) HINT="hints/macOS.500" ;;
+    Linux) HINT="hints/linux.500" ;;
+    *) echo "error: unsupported platform $(uname -s); set NH_HINT=hints/<file>" >&2; exit 1 ;;
+  esac
+fi
 if [ ! -f "$NH/src/Makefile" ] || [ "$PATCH_JUST_APPLIED" = "1" ]; then
-  echo ">> Running setup.sh (hints/macOS.500)"
-  (cd "$NH/sys/unix" && sh setup.sh hints/macOS.500)
+  echo ">> Running setup.sh ($HINT)"
+  (cd "$NH/sys/unix" && sh setup.sh "$HINT")
 fi
 
 if ! ls "$NH"/lib/lua-*/src/lua.h >/dev/null 2>&1; then
@@ -52,5 +62,9 @@ node "$ROOT/packages/core-wasm/tools/gen-map-marks.mjs"
 
 echo ">> Generating tombstone image (ported from win/X11/rip.xpm)"
 node "$ROOT/packages/core-wasm/tools/gen-tombstone.mjs"
+
+echo ">> Copying NGPL license text for in-app attribution"
+mkdir -p "$ROOT/packages/ui/public"
+cp "$NH/dat/license" "$ROOT/packages/ui/public/LICENSE-NETHACK.txt"
 
 echo ">> Core prep complete. Now run: npm run build:core"

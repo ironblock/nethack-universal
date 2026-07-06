@@ -69,15 +69,35 @@ npm run dev -w @nethack-universal/ui              # http://localhost:5173
   (`packages/core-wasm/tools/gen-status-icons.mjs`) — plus a color-coded HP bar.
 - **Adjustable tile size** (+/− controls in the header), redrawn instantly from
   a client-side glyph cache — no core round-trip needed.
+- Font-size control, a startup splash, a statuslines compact/spread toggle, a
+  graphical tombstone (ported from `win/X11/rip.xpm`), a paper-doll equipment
+  view, pet/pile map markers, and a multi-save-slot picker — see the source
+  comments in `packages/ui/src/` for how each one works.
 
 Remaining for full Qt parity (both low-priority / explicitly optional per the
-original brief): runtime tileset switching, and long-menu "paging" (already
-effectively handled via scroll).
+original brief): runtime tileset switching, long-menu "paging" (already
+effectively handled via scroll), character-creation portraits, and a
+menu-bar/toolbar (intentional keyboard-first tradeoff).
 
 Next: Tauri desktop shell (Phase 4) — `packages/ui/src/persistence.ts`'s
 `Storage` interface is already abstracted for a real-filesystem swap.
 
+## Deploying to GitHub Pages
+
+`.github/workflows/deploy-pages.yml` builds the core from scratch (no build
+artifacts are committed) and publishes `packages/ui/dist` on every push to
+`main`. It's a **project-page** deploy, served from `/<repo-name>/` rather
+than the domain root — every runtime asset fetch in `packages/ui/src` is
+prefixed with `base.ts`'s `BASE_URL` (Vite's `import.meta.env.BASE_URL`, set
+via `--base=/<repo-name>/` at build time) for exactly that reason. To enable:
+in the repo's Settings → Pages, set Source to "GitHub Actions".
+
+The workflow's Linux build path (`hints/linux.500`) has not been verified
+against a real CI run as of this writing — only `hints/macOS.500` has
+actually been built and played locally. If the workflow fails, start there.
+
 ## Licensing
 
 The compiled core is **NGPL** (NetHack General Public License), not MIT. The UI is
-kept cleanly separated in `packages/ui`. Read the license before publishing.
+kept cleanly separated in `packages/ui`. The deployed site links to the license
+text (copied from `vendor/nethack/dat/license`) in its footer.

@@ -15,6 +15,8 @@
  * one. We additionally render the live candidate list as a clickable
  * command palette (Qt uses a static button grid instead).
  */
+import { BASE_URL } from "./base";
+
 // func_tab.h
 const WIZMODECMD = 0x0004;
 const CMD_NOT_AVAILABLE = 0x0010;
@@ -37,7 +39,7 @@ export class ExtCmdController {
   constructor(private overlay: HTMLElement) {}
 
   async load(): Promise<void> {
-    const res = await fetch("/extcmds.json");
+    const res = await fetch(`${BASE_URL}extcmds.json`);
     const all: ExtCmd[] = await res.json();
     this.cmds = all.filter(
       (c) =>

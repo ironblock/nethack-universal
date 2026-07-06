@@ -5,6 +5,7 @@
  * The core hands us a glyph number in print_glyph; glyph2tile[glyph] is the tile
  * index, and tiles are laid out `cols` per row in the sheet.
  */
+import { BASE_URL } from "./base";
 
 // NetHack map dimensions (include/config.h): COLNO=80 (col 0 unused), ROWNO=21.
 const COLNO = 80;
@@ -47,13 +48,13 @@ export class TileRenderer {
   /** Pixel size of one rendered tile (backing store). 2× source for readability. */
   renderSize = 32;
 
-  async load(base = "/tiles"): Promise<void> {
+  async load(base = `${BASE_URL}tiles`): Promise<void> {
     const [meta, glyph2tile, sheet, petMark, pileMark] = await Promise.all([
       fetch(`${base}/meta.json`).then((r) => r.json() as Promise<TileMeta>),
       fetch(`${base}/glyph2tile.json`).then((r) => r.json() as Promise<number[]>),
       loadImage(`${base}/tiles.png`),
-      loadImage("/map-marks/pet.png"),
-      loadImage("/map-marks/pile.png"),
+      loadImage(`${BASE_URL}map-marks/pet.png`),
+      loadImage(`${BASE_URL}map-marks/pile.png`),
     ]);
     this.meta = meta;
     this.glyph2tile = glyph2tile;
