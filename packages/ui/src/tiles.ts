@@ -23,6 +23,10 @@ interface TileMeta {
 export const MIN_RENDER_SIZE = 16;
 export const MAX_RENDER_SIZE = 64;
 
+// How long after the window regains focus a map click is still assumed to be
+// "just refocusing" rather than a deliberate travel/look click.
+const FOCUS_CLICK_GUARD_MS = 500;
+
 /** Map-cell marker overlays (ported from Qt's pet_mark_xpm/pile_mark_xpm). */
 export type CellMark = "pet" | "pile" | undefined;
 const MARK_CODE: Record<Exclude<CellMark, undefined>, number> = { pet: 1, pile: 2 };
@@ -78,6 +82,13 @@ export class TileRenderer {
   /**
    * Report map cell clicks. Left button → CLICK_1 (1), right → CLICK_2 (2).
    * Accounts for any CSS scaling of the canvas.
+   *
+   * The click that merely refocuses the browser tab/window (alt-tab back,
+   * dismissing devtools, clicking from the OS taskbar, ...) is swallowed
+   * rather than forwarded — otherwise it reads as "travel to this cell",
+   * which can silently burn many turns (and several free monster attacks)
+   * before the player notices. Standard fix: track window focus/blur and
+   * ignore the first click that lands within a short window after refocus.
    */
   onCellClick(handler: (x: number, y: number, button: number) => void): void {
     const toCell = (e: MouseEvent) => {
@@ -86,12 +97,27 @@ export class TileRenderer {
       const py = ((e.clientY - rect.top) * this.canvas.height) / rect.height;
       return { x: Math.floor(px / this.renderSize), y: Math.floor(py / this.renderSize) };
     };
+
+    let suppressClick = false;
+    window.addEventListener("focus", () => {
+      suppressClick = true;
+      setTimeout(() => (suppressClick = false), FOCUS_CLICK_GUARD_MS);
+    });
+
     this.canvas.addEventListener("click", (e) => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
       const { x, y } = toCell(e);
       handler(x, y, 1); // CLICK_1
     });
     this.canvas.addEventListener("contextmenu", (e) => {
       e.preventDefault();
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
       const { x, y } = toCell(e);
       handler(x, y, 2); // CLICK_2
     });
