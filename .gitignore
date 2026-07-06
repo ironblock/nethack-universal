@@ -52,3 +52,6 @@ packages/ui/public/tombstone.png
 
 # NGPL license text, copied from vendor/nethack/dat/license for in-app attribution
 packages/ui/public/LICENSE-NETHACK.txt
+
+# Generated character-creation data (produced by gen-roles.mjs from role.c/monsters.h)
+packages/ui/public/roles.json

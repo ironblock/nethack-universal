@@ -17,6 +17,7 @@ import { PaperdollPanel } from "./paperdoll";
 import { PromptController } from "./prompt";
 import { IdbfsStorage } from "./persistence";
 import { SaveSelectController } from "./saveselect";
+import { CharPickController } from "./charpick";
 import { TextWindowController } from "./textwindow";
 import { TombstoneController } from "./tombstone";
 import { ExtCmdController } from "./extcmd";
@@ -120,10 +121,35 @@ async function boot(): Promise<void> {
   // Qt's qt_svsel.cpp: pick an existing saved adventurer to resume, or start a
   // new one. Saves are parsed from "<uid><plname>" filenames (files.c
   // set_savefile_name) — our WASM build has a fixed uid, so it's just a
-  // leading digit run to strip.
+  // leading digit run to strip. A new adventurer continues into the graphical
+  // character picker (qt_plsel.cpp); its choice reaches the core purely via
+  // options, so genl_player_setup finds a fully-specified character and never
+  // shows its fallback menus. Backing out of the picker returns to this screen.
   dismissSplash();
   const saveSelectCtl = new SaveSelectController(byId("saveselect"));
-  const playerName = await saveSelectCtl.choose(storage.listSaves());
+  const charPickCtl = new CharPickController(byId("saveselect"), renderer);
+  await charPickCtl.load();
+  let playerName: string;
+  for (;;) {
+    const save = await saveSelectCtl.choose(storage.listSaves());
+    if (save.kind === "resume") {
+      playerName = save.name;
+      break;
+    }
+    const choice = await charPickCtl.pick(save.name);
+    if (!choice) continue; // Back → save select again
+    playerName = choice.name;
+    // ENV mutations after runtime init don't reach the core (emscripten
+    // snapshots the environment), so the character spec goes through the RC
+    // file instead: cfgfiles.c reads $HOME/.nethackrc (HOME defaults to
+    // /home/web_user in emscripten's MEMFS) during initoptions, and then
+    // applies NETHACKOPTIONS — our static prefs — on top as extra options.
+    m.FS.writeFile(
+      "/home/web_user/.nethackrc",
+      `OPTIONS=role:${choice.role}\nOPTIONS=race:${choice.race}\nOPTIONS=gender:${choice.gender}\nOPTIONS=align:${choice.align}\n`,
+    );
+    break;
+  }
   m.ENV.USER = playerName;
 
   ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl, statusIcons, tombstoneCtl, paperdoll);

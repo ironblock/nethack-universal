@@ -1,17 +1,23 @@
 /**
  * Save-slot picker (Qt's qt_svsel.cpp "NetHackQtSaveWindow"): a list of
  * existing saved adventurers to resume, plus a way to start a new one.
- * Resolves with the chosen player name; caller sets ENV.USER/argv from it.
+ * Resuming resolves immediately with the saved name; "new" resolves with the
+ * typed name so the caller can hand off to the character picker (charpick.ts).
  */
+export interface SaveChoice {
+  kind: "resume" | "new";
+  name: string;
+}
+
 export class SaveSelectController {
   constructor(private el: HTMLElement) {}
 
-  choose(existing: string[]): Promise<string> {
+  choose(existing: string[]): Promise<SaveChoice> {
     return new Promise((resolve) => {
-      const finish = (name: string) => {
+      const finish = (choice: SaveChoice) => {
         this.el.replaceChildren();
         this.el.style.display = "none";
-        resolve(name);
+        resolve(choice);
       };
 
       const root = document.createElement("div");
@@ -29,7 +35,7 @@ export class SaveSelectController {
           btn.type = "button";
           btn.className = "saveselect-btn";
           btn.textContent = name;
-          btn.addEventListener("click", () => finish(name));
+          btn.addEventListener("click", () => finish({ kind: "resume", name }));
           list.appendChild(btn);
         }
         root.appendChild(list);
@@ -51,7 +57,7 @@ export class SaveSelectController {
 
       const go = () => {
         const name = input.value.trim() || "Adventurer";
-        finish(name);
+        finish({ kind: "new", name });
       };
       startBtn.addEventListener("click", go);
       input.addEventListener("keydown", (e) => {

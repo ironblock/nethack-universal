@@ -358,6 +358,79 @@
         cursor: pointer;
       }
       .saveselect-new button:hover { background: #35406a; }
+
+      /* Character picker (qt_plsel.cpp) — shares the #saveselect overlay */
+      .charpick {
+        background: #161616;
+        border: 1px solid #333;
+        border-radius: 8px;
+        padding: 22px 26px;
+        max-width: min(92vw, 720px);
+        max-height: 92vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .charpick h2 { margin: 0; color: #e9c46a; font-size: 1.2em; text-align: center; }
+      .charpick-name { display: flex; align-items: center; gap: 10px; }
+      .charpick-name label { color: #789; }
+      .charpick-name input {
+        flex: 1;
+        background: #0c0c0c;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #eee;
+        font: inherit;
+        padding: 6px 8px;
+      }
+      .charpick-name input:focus { outline: none; border-color: #6a7; }
+      .charpick-roles {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+      }
+      .charpick-card {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #1e1e1e;
+        border: 1px solid #333;
+        border-radius: 5px;
+        color: #ccc;
+        font: inherit;
+        padding: 5px 8px;
+        cursor: pointer;
+        text-transform: capitalize;
+        text-align: left;
+      }
+      .charpick-card:hover:not(:disabled) { background: #2b2b3a; }
+      .charpick-card.selected { background: #35406a; border-color: #5a6ab0; color: #fff; }
+      .charpick-card:disabled { opacity: 0.25; cursor: default; }
+      .charpick-portrait { image-rendering: pixelated; width: 32px; height: 32px; flex-shrink: 0; }
+      .charpick-bottom { display: flex; gap: 14px; align-items: flex-start; }
+      .charpick-section { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+      .charpick-section-label { color: #789; font-size: 12px; }
+      .charpick-section-body { display: flex; flex-direction: column; gap: 5px; }
+      .charpick-summary {
+        text-align: center;
+        color: #8ab68a;
+        font-style: italic;
+        min-height: 1.2em;
+      }
+      .charpick-footer { display: flex; justify-content: center; gap: 10px; }
+      .charpick-footer button {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        color: #cdc;
+        border-radius: 4px;
+        padding: 7px 22px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .charpick-footer button:hover { background: #35406a; }
+      .charpick-footer button.primary { background: #2e4a2e; border-color: #4a6; color: #dfd; }
+      .charpick-footer button.primary:hover { background: #3a6a3a; }
     </style>
   </head>
   <body>

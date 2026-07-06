@@ -63,6 +63,9 @@ node "$ROOT/packages/core-wasm/tools/gen-map-marks.mjs"
 echo ">> Generating tombstone image (ported from win/X11/rip.xpm)"
 node "$ROOT/packages/core-wasm/tools/gen-tombstone.mjs"
 
+echo ">> Generating character-creation data (roles/races/portraits, qt_plsel.cpp parity)"
+node "$ROOT/packages/core-wasm/tools/gen-roles.mjs"
+
 echo ">> Copying NGPL license text for in-app attribution"
 mkdir -p "$ROOT/packages/ui/public"
 cp "$NH/dat/license" "$ROOT/packages/ui/public/LICENSE-NETHACK.txt"
