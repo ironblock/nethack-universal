@@ -66,6 +66,9 @@ node "$ROOT/packages/core-wasm/tools/gen-tombstone.mjs"
 echo ">> Generating character-creation data (roles/races/portraits, qt_plsel.cpp parity)"
 node "$ROOT/packages/core-wasm/tools/gen-roles.mjs"
 
+echo ">> Generating toolbar icons (ported from qt_main.cpp's XPMs)"
+node "$ROOT/packages/core-wasm/tools/gen-toolbar-icons.mjs"
+
 echo ">> Copying NGPL license text for in-app attribution"
 mkdir -p "$ROOT/packages/ui/public"
 cp "$NH/dat/license" "$ROOT/packages/ui/public/LICENSE-NETHACK.txt"

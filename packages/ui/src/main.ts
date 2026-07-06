@@ -22,6 +22,7 @@ import { TextWindowController } from "./textwindow";
 import { TombstoneController } from "./tombstone";
 import { ExtCmdController } from "./extcmd";
 import { wireLayout } from "./layout";
+import { wireMenubar } from "./menubar";
 import { StatusIcons } from "./statusicons";
 import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
 import type { StatusLayout } from "./status";
@@ -74,6 +75,19 @@ async function boot(): Promise<void> {
   // Click a map cell to travel there (left) or look (right).
   renderer.onCellClick((x, y, button) => ui.input.push({ kind: "mouse", x, y, button }));
   wireStatusLayoutControl(ui);
+
+  // Menubar + toolbar (qt_main.cpp): items dispatch extended commands by
+  // priming the '#' palette, gated on the core waiting at a command prompt.
+  wireMenubar(byId("menubar"), byId("toolbar"), {
+    baseUrl: BASE_URL,
+    hasCommand: (cmd) => cmd === "#" || extCmdCtl.has(cmd),
+    dispatch: (cmd) => {
+      if (!ui.awaitingCommand) return false;
+      if (cmd !== "#" && !extCmdCtl.prime(cmd)) return false;
+      ui.input.pushKey("#".charCodeAt(0));
+      return true;
+    },
+  });
 
   // Emscripten ES6 module: default export is the factory. It lives in /public
   // and is served as-is; hide the specifier from Vite's import-analysis so the

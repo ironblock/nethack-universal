@@ -55,3 +55,6 @@ packages/ui/public/LICENSE-NETHACK.txt
 
 # Generated character-creation data (produced by gen-roles.mjs from role.c/monsters.h)
 packages/ui/public/roles.json
+
+# Generated toolbar icons (produced by gen-toolbar-icons.mjs from qt_main.cpp)
+packages/ui/public/toolbar/

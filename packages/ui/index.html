@@ -47,15 +47,70 @@
        * Header
        * ---------------------------------------------------------------- */
       header {
-        padding: 5px 12px;
+        padding: 4px 12px;
         background: var(--panel);
         border-bottom: 1px solid var(--border);
         font-size: 13px;
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: 12px;
         flex-shrink: 0;
+      }
+
+      /* Menubar (qt_main.cpp Game/Gear/Action/Magic/Info/Help) */
+      #menubar { display: flex; }
+      .menubar-menu { position: relative; }
+      .menubar-menu > button {
+        background: none;
+        border: none;
+        color: var(--text);
+        padding: 4px 9px;
+        border-radius: 4px;
+      }
+      .menubar-menu > button:hover, .menubar-menu.open > button { background: var(--sel); color: #fff; }
+      .menubar-drop {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        z-index: 30;
+        min-width: 200px;
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        padding: 4px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+      }
+      .menubar-menu.open .menubar-drop { display: block; }
+      .menubar-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        color: var(--text);
+        padding: 4px 10px;
+        border-radius: 4px;
+        white-space: nowrap;
+      }
+      .menubar-item:hover { background: var(--sel); color: #fff; }
+      .menubar-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+      /* Toolbar (qt_main.cpp AddToolButton row) */
+      #toolbar { display: flex; gap: 2px; }
+      .toolbar-btn {
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 3px 5px;
+        display: flex;
+        align-items: center;
+      }
+      .toolbar-btn:hover { background: var(--sel); border-color: var(--sel-border); }
+      .toolbar-btn img { image-rendering: pixelated; display: block; filter: invert(0.85); }
+      .refused { animation: refused-flash 0.3s; }
+      @keyframes refused-flash {
+        50% { background: var(--bad); }
       }
       #wordmark {
         font-family: var(--font-display);
@@ -551,6 +606,9 @@
   <body>
     <header>
       <span id="wordmark">NetHack</span>
+      <nav id="menubar"></nav>
+      <span id="toolbar"></span>
+      <span style="flex: 1"></span>
       <span id="header-controls">
         <span class="ctl" id="fontsize">
           Font

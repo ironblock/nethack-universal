@@ -35,8 +35,25 @@ export interface ExtCmd {
 
 export class ExtCmdController {
   private cmds: ExtCmd[] = [];
+  private primed: string | null = null;
 
   constructor(private overlay: HTMLElement) {}
+
+  /**
+   * Pre-answer the next choose() with a command by name (the menubar's
+   * dispatch path: it pushes '#' into the input queue and primes the command,
+   * so the core's get_ext_cmd resolves silently — the web analog of Qt's
+   * "inject '#cmdname\n'" FuncAsCommand fallback in qt_main.cpp).
+   */
+  prime(name: string): boolean {
+    if (!this.has(name)) return false;
+    this.primed = name;
+    return true;
+  }
+
+  has(name: string): boolean {
+    return this.cmds.some((c) => c.txt === name);
+  }
 
   async load(): Promise<void> {
     const res = await fetch(`${BASE_URL}extcmds.json`);
@@ -50,6 +67,11 @@ export class ExtCmdController {
   }
 
   choose(): Promise<number> {
+    if (this.primed !== null) {
+      const cmd = this.cmds.find((c) => c.txt === this.primed);
+      this.primed = null;
+      if (cmd) return Promise.resolve(cmd.index);
+    }
     const overlay = this.overlay;
     return new Promise((resolve) => {
       let typed = "";

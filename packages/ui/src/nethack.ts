@@ -100,6 +100,9 @@ export class NetHackUI {
     this.status.render();
   }
 
+  /** True while the core is suspended at the main command prompt (nh_poskey). */
+  awaitingCommand = false;
+
   /** Set true to trace every window-proc call to the console (capped). */
   debug = false;
   private callCount = 0;
@@ -183,8 +186,12 @@ export class NetHackUI {
 
       case "shim_nh_poskey": {
         // Returns a keystroke, or 0 for a map click (with *x,*y,*mod filled).
+        // The moveloop's command prompt waits here — while suspended, menubar/
+        // toolbar dispatch is safe (Qt's ok_for_command analog).
         const [xPtr, yPtr, modPtr] = args as [number, number, number];
+        this.awaitingCommand = true;
         const ev = await this.input.next();
+        this.awaitingCommand = false;
         if (ev.kind === "mouse") {
           if (xPtr) this.mod.setValue(xPtr, ev.x, "i16");
           if (yPtr) this.mod.setValue(yPtr, ev.y, "i16");
