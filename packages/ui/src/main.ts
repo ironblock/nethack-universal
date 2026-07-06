@@ -18,6 +18,9 @@ import { IdbfsStorage } from "./persistence";
 import { TextWindowController } from "./textwindow";
 import { ExtCmdController } from "./extcmd";
 import { StatusIcons } from "./statusicons";
+import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
+
+const TILE_SIZE_STEP = 8;
 
 const CALLBACK_NAME = "nethackCallback";
 
@@ -30,6 +33,7 @@ async function boot(): Promise<void> {
   const renderer = new TileRenderer();
   await renderer.load();
   renderer.attach(byId("map") as HTMLCanvasElement);
+  wireTileSizeControls(renderer);
 
   const menuCtl = new MenuController(byId("overlay"), renderer);
   const promptCtl = new PromptController(byId("overlay"));
@@ -110,6 +114,25 @@ function byId(id: string): HTMLElement {
   const el = document.getElementById(id);
   if (!el) throw new Error(`missing #${id}`);
   return el;
+}
+
+/** Adjustable tile size (Qt exposes this via 'tile_width'/'tile_height'; we do it client-side). */
+function wireTileSizeControls(renderer: TileRenderer): void {
+  const dec = byId("tilesize-dec") as HTMLButtonElement;
+  const inc = byId("tilesize-inc") as HTMLButtonElement;
+  const sync = () => {
+    dec.disabled = renderer.renderSize <= MIN_RENDER_SIZE;
+    inc.disabled = renderer.renderSize >= MAX_RENDER_SIZE;
+  };
+  dec.addEventListener("click", () => {
+    renderer.setSize(renderer.renderSize - TILE_SIZE_STEP);
+    sync();
+  });
+  inc.addEventListener("click", () => {
+    renderer.setSize(renderer.renderSize + TILE_SIZE_STEP);
+    sync();
+  });
+  sync();
 }
 
 boot().catch((err) => {

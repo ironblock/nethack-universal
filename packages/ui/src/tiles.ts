@@ -19,6 +19,9 @@ interface TileMeta {
   glyphCount: number;
 }
 
+export const MIN_RENDER_SIZE = 16;
+export const MAX_RENDER_SIZE = 64;
+
 export class TileRenderer {
   private meta!: TileMeta;
   private glyph2tile!: number[];
@@ -27,8 +30,14 @@ export class TileRenderer {
   private canvas!: HTMLCanvasElement;
   private tile = 16;
 
+  // Last-drawn glyph per map cell (-1 = never drawn), so changing tile size can
+  // redraw locally instead of asking the core to repaint (no redraw command
+  // needed — matches Qt/tty's "adjustable tile size" without core involvement).
+  private cells = new Int32Array(COLNO * ROWNO).fill(-1);
+  private lastCenter = { x: 0, y: 0 };
+
   /** Pixel size of one rendered tile (backing store). 2× source for readability. */
-  readonly renderSize = 32;
+  renderSize = 32;
 
   async load(base = "/tiles"): Promise<void> {
     const [meta, glyph2tile, sheet] = await Promise.all([
@@ -77,6 +86,7 @@ export class TileRenderer {
 
   /** Scroll the map's scroll container so cell (x, y) is centred (follow the hero). */
   centerOn(x: number, y: number): void {
+    this.lastCenter = { x, y };
     const box = this.canvas.parentElement;
     if (!box) return;
     const d = this.renderSize;
@@ -95,7 +105,23 @@ export class TileRenderer {
   /** Draw the tile for `glyph` at map cell (x, y). */
   drawGlyph(x: number, y: number, glyph: number): void {
     if (x < 0 || x >= COLNO || y < 0 || y >= ROWNO) return;
+    this.cells[y * COLNO + x] = glyph;
     this.blit(this.ctx, glyph, x * this.renderSize, y * this.renderSize, this.renderSize);
+  }
+
+  /** Change the on-screen tile size and redraw from the local glyph cache (no core involvement). */
+  setSize(px: number): void {
+    this.renderSize = Math.max(MIN_RENDER_SIZE, Math.min(MAX_RENDER_SIZE, px));
+    this.canvas.width = COLNO * this.renderSize;
+    this.canvas.height = ROWNO * this.renderSize;
+    this.clear();
+    for (let y = 0; y < ROWNO; y++) {
+      for (let x = 0; x < COLNO; x++) {
+        const glyph = this.cells[y * COLNO + x] ?? -1;
+        if (glyph >= 0) this.blit(this.ctx, glyph, x * this.renderSize, y * this.renderSize, this.renderSize);
+      }
+    }
+    this.centerOn(this.lastCenter.x, this.lastCenter.y);
   }
 
   /** Blit the tile for `glyph` into any 2d context at (dx, dy), scaled to `size`. */
