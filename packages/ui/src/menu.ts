@@ -3,6 +3,19 @@
  * select_menu) as clickable HTML popups with tile-annotated rows, and resolves
  * a promise with the user's selection.
  *
+ * Interaction model ported from Qt's NetHackQtMenuWindow (qt_menu.cpp):
+ *  - Ok / Cancel / All / None / Invert / Search button row with the same
+ *    per-mode enabling rules (SelectMenu, qt_menu.cpp:315-325)
+ *  - digit keys type a count ("Count: N") applied to the next toggled item,
+ *    with '#' starting a zero count and Backspace editing (InputCount)
+ *  - a digit first checks group accelerators before starting a count, and
+ *    any other key toggles every row sharing that group accelerator (gch)
+ *  - the core's menu command keys (wintype.h): '.' all, '-' none, '@' invert,
+ *    page variants aliased to the whole menu, ':' search
+ *  - Esc clears a pending count, then a pending search, then cancels
+ *  - items arriving flagged MENU_ITEMFLAGS_SELECTED start selected; a
+ *    PICK_ONE menu with exactly one preselected item accepts it on Enter
+ *
  * how: PICK_NONE (0) display-only, PICK_ONE (1) single pick, PICK_ANY (2) multi.
  */
 import type { TileRenderer } from "./tiles";
@@ -10,6 +23,41 @@ import type { TileRenderer } from "./tiles";
 export const PICK_NONE = 0;
 export const PICK_ONE = 1;
 export const PICK_ANY = 2;
+
+// include/wintype.h
+const MENU_ITEMFLAGS_SELECTED = 0x1;
+const KEY_ALL = [".", ","]; // MENU_SELECT_ALL / _PAGE ("page" = whole menu here)
+const KEY_NONE = ["-", "\\"]; // MENU_UNSELECT_ALL / _PAGE
+const KEY_INVERT = ["@", "~"]; // MENU_INVERT_ALL / _PAGE
+const KEY_SEARCH = [":"]; // MENU_SEARCH
+
+// include/wintype.h ATR_* → CSS class; include/color.h CLR_* → CSS color.
+const ATTR_CLASS: Record<number, string> = {
+  1: "atr-bold",
+  2: "atr-dim",
+  3: "atr-italic",
+  4: "atr-uline",
+  5: "atr-blink",
+  7: "atr-inverse",
+};
+// Dark-theme readable takes on the 16 tty colors. CLR_BLACK (0) and NO_COLOR
+// (8) fall through to the default text color.
+const CLR_CSS: Record<number, string> = {
+  1: "#d96459", // red
+  2: "#6fbf73", // green
+  3: "#b08d57", // brown
+  4: "#6a8ad8", // blue
+  5: "#b678c9", // magenta
+  6: "#5fb8b8", // cyan
+  7: "#9aa0a6", // gray
+  9: "#e69a4c", // orange
+  10: "#8fe08f", // bright green
+  11: "#e0d060", // yellow
+  12: "#8fb8ff", // bright blue
+  13: "#e08fe0", // bright magenta
+  14: "#8fe0e0", // bright cyan
+  15: "#f0f2f5", // white
+};
 
 /**
  * The menu identifier. The shim marshals the `anything` union as fmt 'i', i.e.
@@ -21,10 +69,13 @@ export type Identifier = number;
 export interface MenuItem {
   identifier: Identifier;
   accel: number; // accelerator char code; 0 = not selectable (header/text)
+  groupAccel: number; // group accelerator char code (gch); 0 = none
   glyph: number; // -1 if none
   text: string;
+  attr: number; // ATR_* text attribute
+  color: number; // CLR_* text color (8 = NO_COLOR)
   selectable: boolean;
-  preselected: boolean;
+  preselected: boolean; // MENU_ITEMFLAGS_SELECTED
 }
 
 export interface MenuPick {
@@ -42,11 +93,39 @@ export class MenuController {
 
   show(prompt: string, items: MenuItem[], how: number): Promise<MenuPick[]> {
     assignAccelerators(items);
-    const selected = new Set<MenuItem>(how === PICK_ANY ? items.filter((i) => i.preselected) : []);
+    padTabColumns(items);
+    const selected = new Set<MenuItem>(
+      how === PICK_ANY ? items.filter((i) => i.selectable && i.preselected) : [],
+    );
+    const counts = new Map<MenuItem, number>(); // explicit partial-stack counts
+    const preselCt = items.filter((i) => i.selectable && i.preselected).length;
 
     return new Promise<MenuPick[]>((resolve) => {
       const root = document.createElement("div");
       root.className = "menu";
+
+      // Qt's button row sits above the prompt (qt_menu.cpp:207-213).
+      let searchBox: HTMLInputElement | null = null;
+      const buttons = document.createElement("div");
+      buttons.className = "menu-buttons";
+      const btn = (label: string, enabled: boolean, onClick: () => void): HTMLButtonElement => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = label;
+        b.disabled = !enabled;
+        b.addEventListener("click", onClick);
+        buttons.appendChild(b);
+        return b;
+      };
+      const okOk = how !== PICK_ONE || preselCt === 1;
+      btn("Ok", okOk, () => accept());
+      btn("Cancel", true, () => finish([]));
+      const single = items.filter((i) => i.selectable).length === 1;
+      btn("All", how === PICK_ANY || (how === PICK_ONE && single), () => bulk("all"));
+      btn("None", how === PICK_ANY || (how === PICK_ONE && preselCt === 1), () => bulk("none"));
+      btn("Invert", how === PICK_ANY || (how === PICK_ONE && single), () => bulk("invert"));
+      btn("Search", how !== PICK_NONE, () => openSearch());
+      root.appendChild(buttons);
 
       if (prompt) {
         const title = document.createElement("div");
@@ -60,8 +139,9 @@ export class MenuController {
       root.appendChild(list);
 
       const rowEls = new Map<MenuItem, HTMLElement>();
+      const countEls = new Map<MenuItem, HTMLElement>();
       for (const item of items) {
-        const row = this.renderRow(item, how);
+        const row = this.renderRow(item, how, countEls);
         rowEls.set(item, row);
         list.appendChild(row);
         if (selected.has(item)) row.classList.add("selected");
@@ -72,12 +152,13 @@ export class MenuController {
 
       const footer = document.createElement("div");
       footer.className = "menu-footer";
-      footer.textContent =
+      const footerDefault =
         how === PICK_NONE
           ? "(press any key)"
           : how === PICK_ONE
             ? "click an item, or press its letter · Esc to cancel"
-            : "toggle items · Enter to accept · Esc to cancel";
+            : "toggle items · type digits for a count · Enter to accept · Esc to cancel";
+      footer.textContent = footerDefault;
       root.appendChild(footer);
 
       const finish = (picks: MenuPick[]) => {
@@ -87,30 +168,156 @@ export class MenuController {
         resolve(picks);
       };
 
-      const onPick = (item: MenuItem) => {
-        if (how === PICK_ONE) {
-          finish([{ identifier: item.identifier, count: -1 }]);
+      // ---- count entry (qt_menu.cpp InputCount/ClearCount) ----
+      let countStr = "";
+      const counting = () => countStr !== "";
+      const showCount = () => {
+        footer.textContent = counting() ? `Count: ${countStr}` : footerDefault;
+      };
+      const inputCount = (ch: string) => {
+        if (ch === "\b") {
+          countStr = countStr.slice(0, -1);
         } else {
-          // PICK_ANY: toggle
-          if (selected.has(item)) selected.delete(item);
-          else selected.add(item);
-          rowEls.get(item)?.classList.toggle("selected", selected.has(item));
+          if (ch === "#") ch = "0";
+          else if (ch > "0" && countStr === "0") countStr = "";
+          countStr += ch;
+        }
+        showCount();
+      };
+      const clearCount = () => {
+        countStr = "";
+        showCount();
+      };
+
+      const setSelected = (item: MenuItem, on: boolean) => {
+        if (on) selected.add(item);
+        else selected.delete(item);
+        rowEls.get(item)?.classList.toggle("selected", on);
+        if (!on || !counts.has(item)) {
+          counts.delete(item);
+          const el = countEls.get(item);
+          if (el) el.textContent = "";
         }
       };
 
+      const onPick = (item: MenuItem) => {
+        if (how === PICK_ONE) {
+          const n = counting() ? parseInt(countStr, 10) : -1;
+          finish([{ identifier: item.identifier, count: n }]);
+          return;
+        }
+        // PICK_ANY: an explicit count selects with that count (0 deselects);
+        // otherwise toggle (qt_menu.cpp ToggleSelect).
+        if (counting()) {
+          const n = parseInt(countStr, 10);
+          clearCount();
+          if (n > 0) {
+            counts.set(item, n);
+            setSelected(item, true);
+            const el = countEls.get(item);
+            if (el) el.textContent = String(n);
+          } else {
+            setSelected(item, false);
+          }
+        } else {
+          counts.delete(item);
+          setSelected(item, !selected.has(item));
+        }
+      };
+
+      const bulk = (op: "all" | "none" | "invert") => {
+        if (how === PICK_NONE) return;
+        clearCount();
+        for (const item of items) {
+          if (!item.selectable) continue;
+          if (op === "all") setSelected(item, true);
+          else if (op === "none") setSelected(item, false);
+          else setSelected(item, !selected.has(item));
+        }
+      };
+
+      // ---- search (qt_menu.cpp Search: toggle case-insensitive matches) ----
+      const openSearch = () => {
+        if (searchBox) {
+          searchBox.focus();
+          return;
+        }
+        searchBox = document.createElement("input");
+        searchBox.type = "text";
+        searchBox.placeholder = "Search for…";
+        searchBox.className = "menu-search";
+        searchBox.addEventListener("keydown", (e) => {
+          e.stopPropagation();
+          if (e.key === "Escape") closeSearch();
+          if (e.key !== "Enter") return;
+          const q = searchBox!.value.toLowerCase();
+          closeSearch();
+          if (!q) return;
+          for (const item of items) {
+            if (!item.selectable || !item.text.toLowerCase().includes(q)) continue;
+            if (how === PICK_ONE) return onPick(item); // first match picks
+            onPick(item);
+          }
+        });
+        root.insertBefore(searchBox, footer);
+        searchBox.focus();
+      };
+      const closeSearch = () => {
+        searchBox?.remove();
+        searchBox = null;
+      };
+
       const accept = () =>
-        finish([...selected].map((i) => ({ identifier: i.identifier, count: -1 })));
+        finish(
+          [...selected].map((i) => ({ identifier: i.identifier, count: counts.get(i) ?? -1 })),
+        );
 
       const onKey = (e: KeyboardEvent) => {
+        if (e.target === searchBox) return; // search box handles its own keys
         e.preventDefault();
         e.stopPropagation();
         if (how === PICK_NONE) return finish([]);
-        if (e.key === "Escape") return finish([]);
-        if (how === PICK_ANY && (e.key === "Enter" || e.key === " ")) return accept();
+        if (e.key === "Escape") {
+          if (counting()) return clearCount();
+          if (searchBox) return closeSearch();
+          return finish([]);
+        }
+        if (e.key === "Enter" || (how === PICK_ANY && e.key === " ")) {
+          // PICK_ONE accepts a lone preselected item (qt_menu SelectMenu).
+          if (how === PICK_ONE) {
+            const pre = items.find((i) => i.selectable && i.preselected);
+            if (preselCt === 1 && pre) return finish([{ identifier: pre.identifier, count: -1 }]);
+            return finish([]);
+          }
+          return accept();
+        }
+        if (e.key === "Backspace") return inputCount("\b");
 
-        const code = e.key.length === 1 ? e.key.charCodeAt(0) : 0;
+        const key = e.key.length === 1 ? e.key : "";
+        if (!key) return;
+        const code = key.charCodeAt(0);
+
+        // Item accelerator wins over everything (qt_menu keyPressEvent).
         const item = items.find((i) => i.selectable && i.accel === code);
-        if (item) onPick(item);
+        if (item) return onPick(item);
+
+        if (key >= "0" && key <= "9") {
+          if (!counting()) {
+            // digit group-accelerators take precedence over starting a count
+            const hits = items.filter((i) => i.selectable && i.groupAccel === code);
+            if (hits.length) return hits.forEach(onPick);
+          }
+          return inputCount(key);
+        }
+        if (key === "#" && !counting()) return inputCount(key);
+        if (KEY_ALL.includes(key)) return bulk("all");
+        if (KEY_NONE.includes(key)) return bulk("none");
+        if (KEY_INVERT.includes(key)) return bulk("invert");
+        if (KEY_SEARCH.includes(key)) return openSearch();
+
+        // Any other key: toggle all rows sharing it as a group accelerator.
+        const hits = items.filter((i) => i.selectable && i.groupAccel === code);
+        hits.forEach(onPick);
       };
 
       window.addEventListener("keydown", onKey, true);
@@ -119,7 +326,7 @@ export class MenuController {
     });
   }
 
-  private renderRow(item: MenuItem, how: number): HTMLElement {
+  private renderRow(item: MenuItem, how: number, countEls: Map<MenuItem, HTMLElement>): HTMLElement {
     const row = document.createElement("div");
     row.className = item.selectable ? "menu-row selectable" : "menu-row header";
 
@@ -128,6 +335,10 @@ export class MenuController {
       key.className = "menu-accel";
       key.textContent = String.fromCharCode(item.accel);
       row.appendChild(key);
+      const count = document.createElement("span");
+      count.className = "menu-count";
+      countEls.set(item, count);
+      row.appendChild(count);
     }
 
     if (item.glyph >= 0) {
@@ -141,6 +352,10 @@ export class MenuController {
 
     const text = document.createElement("span");
     text.className = "menu-text";
+    const attrClass = ATTR_CLASS[item.attr];
+    if (attrClass) text.classList.add(attrClass);
+    const color = CLR_CSS[item.color];
+    if (color) text.style.color = color;
     text.textContent = item.text;
     row.appendChild(text);
     return row;
@@ -210,4 +425,27 @@ function assignAccelerators(items: MenuItem[]): void {
       next++;
     }
   }
+}
+
+/**
+ * Qt forces iflags.menu_tab_sep on and pads tab-separated sub-fields so
+ * multi-column menus (skills, enlightenment, symbols) line up. Tabs collapse
+ * in HTML, so pad each column to its widest cell — menus render in the
+ * monospace UI font, making space-padding exact.
+ */
+function padTabColumns(items: MenuItem[]): void {
+  if (!items.some((i) => i.text.includes("\t"))) return;
+  const rows = items.map((i) => i.text.split("\t"));
+  const widths: number[] = [];
+  for (const cols of rows) {
+    if (cols.length < 2) continue;
+    cols.forEach((c, j) => {
+      widths[j] = Math.max(widths[j] ?? 0, c.length);
+    });
+  }
+  items.forEach((item, r) => {
+    const cols = rows[r]!;
+    if (cols.length < 2) return;
+    item.text = cols.map((c, j) => c.padEnd(widths[j] ?? c.length)).join(" ");
+  });
 }

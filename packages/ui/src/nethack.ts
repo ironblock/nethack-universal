@@ -236,16 +236,21 @@ export class NetHackUI {
       case "shim_add_menu": {
         const menu = this.menus.get(args[0] as number);
         if (menu) {
+          // winshim.c: (window, glyphinfo, identifier, ch, gch, attr, clr, str, itemflags)
           const glyphinfo = args[1] as number;
           const identifier = args[2] as number; // fmt 'i' → low 32 bits of anything
           const glyph = glyphinfo ? this.mod.getValue(glyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32") : -1;
+          const itemflags = (args[8] as number) ?? 0;
           menu.items.push({
             identifier,
             accel: args[3] as number,
+            groupAccel: (args[4] as number) ?? 0,
             glyph,
             text: (args[7] as string) ?? "",
+            attr: (args[5] as number) ?? 0,
+            color: (args[6] as number) ?? 8, // NO_COLOR
             selectable: identifier !== 0, // zero identifier = header/text line
-            preselected: false,
+            preselected: (itemflags & 0x1) !== 0, // MENU_ITEMFLAGS_SELECTED
           });
         }
         return;

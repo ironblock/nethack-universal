@@ -272,6 +272,44 @@
         color: var(--accent);
         border-bottom: 1px solid var(--border);
       }
+      /* Qt's Ok/Cancel/All/None/Invert/Search row (qt_menu.cpp) */
+      .menu-buttons {
+        display: flex;
+        gap: 6px;
+        padding: 10px 14px 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .menu-buttons button {
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+        border-radius: 4px;
+        padding: 4px 12px;
+      }
+      .menu-buttons button:hover:not(:disabled) { background: var(--sel); }
+      .menu-buttons button:disabled { opacity: 0.35; cursor: default; }
+      .menu-search {
+        margin: 8px 14px;
+        padding: 5px 8px;
+        background: var(--bg);
+        border: 1px solid var(--border-strong);
+        border-radius: 4px;
+        color: #eee;
+        font: inherit;
+      }
+      .menu-search:focus { outline: none; border-color: #6a7; }
+      .menu-count {
+        min-width: 2.5em;
+        text-align: right;
+        color: var(--warn);
+        font-weight: 600;
+      }
+      .atr-bold { font-weight: 700; }
+      .atr-dim { opacity: 0.6; }
+      .atr-italic { font-style: italic; }
+      .atr-uline { text-decoration: underline; }
+      .atr-blink { animation: splash-pulse 1.2s ease-in-out infinite; }
+      .atr-inverse { background: var(--text); color: var(--bg); }
       .menu-list { overflow-y: auto; padding: 4px 0; }
       .menu-row {
         display: flex;
