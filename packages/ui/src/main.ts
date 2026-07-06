@@ -21,6 +21,7 @@ import { CharPickController } from "./charpick";
 import { TextWindowController } from "./textwindow";
 import { TombstoneController } from "./tombstone";
 import { ExtCmdController } from "./extcmd";
+import { wireLayout } from "./layout";
 import { StatusIcons } from "./statusicons";
 import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
 import type { StatusLayout } from "./status";
@@ -50,6 +51,7 @@ async function boot(): Promise<void> {
   const renderer = new TileRenderer();
   await renderer.load();
   renderer.attach(byId("map") as HTMLCanvasElement);
+  wireLayout();
   wireTileSizeControls(renderer);
   wireFontSizeControls();
 
@@ -221,13 +223,13 @@ function wireFontSizeControls(): void {
   apply();
 }
 
-/** Qt's iflags.wc2_statuslines (2="compact"/3="spread") — see status.ts. */
+/** Qt's iflags.wc2_statuslines analog: icon grid ("spread") vs dense strip. */
 function wireStatusLayoutControl(ui: NetHackUI): void {
   const toggle = byId("statuslayout-toggle") as HTMLButtonElement;
-  let layout: StatusLayout = "compact";
+  let layout: StatusLayout = "spread";
   toggle.addEventListener("click", () => {
-    layout = layout === "compact" ? "spread" : "compact";
-    toggle.textContent = layout === "compact" ? "Compact" : "Spread";
+    layout = layout === "spread" ? "compact" : "spread";
+    toggle.textContent = layout === "spread" ? "Grid" : "Dense";
     ui.setStatusLayout(layout);
   });
 }

@@ -59,6 +59,11 @@ const ATTR_ICON: Record<number, string> = { 1: "str", 2: "dex", 3: "cns", 4: "in
 // Traditional two-line layout, by BL_* field index.
 const LINE1 = [0, 1, 2, 3, 4, 5, 6];
 const LINE2 = [20, 10, 18, 19, 11, 12, 14, 13, 21, 15, 16, 8];
+// Vitals row of the icon-grid layout (attributes get their own cards).
+const VITALS = [20, 10, 18, 19, 11, 12, 14, 13, 21, 15, 16, 8];
+
+const HP_COLOR = (pct: number): string =>
+  pct >= 0.5 ? "#3a9e3a" : pct >= 0.25 ? "#c9b93a" : pct >= 0.1 ? "#d67f2a" : "#c93a3a";
 
 // Condition bitmask (BL_MASK_*) → [short display name, icon name or undefined].
 const CONDITIONS: Array<[number, string, string?]> = [
@@ -83,15 +88,15 @@ const CONDITIONS: Array<[number, string, string?]> = [
 
 const ALIGN_ICON: Record<string, string> = { lawful: "lawful", neutral: "neutral", chaotic: "chaotic" };
 
-// Qt's iflags.wc2_statuslines: 2 ("compact") folds Alignment up next to Cha;
-// 3 ("spread", upstream default) shows it with Hunger/Encumbrance/Conditions
-// instead. We default to compact (denser, matches what we shipped earlier).
+// "spread" is Qt's icon-grid status widget (name plate, six attribute cards,
+// vitals, condition chips) — the default, sized for the top-right panel.
+// "compact" is the dense two-text-line strip (Qt's statuslines:2 analog).
 export type StatusLayout = "compact" | "spread";
 
 export class StatusBar {
   private vals = new Map<number, string>();
   private conditionMask = 0;
-  private layout: StatusLayout = "compact";
+  private layout: StatusLayout = "spread";
 
   constructor(
     private el: HTMLElement,
@@ -115,33 +120,74 @@ export class StatusBar {
 
   render(): void {
     const frag = document.createDocumentFragment();
-    frag.appendChild(this.hpBar());
-    frag.appendChild(this.line(LINE1, true));
-    frag.appendChild(this.line(LINE2, false));
+    if (this.layout === "spread") {
+      // Qt's icon-grid status widget: name plate, HP/Pw bars, six attribute
+      // cards, then the vitals and condition rows.
+      const head = document.createElement("div");
+      head.className = "status-head";
+      head.textContent = this.vals.get(0) ?? "";
+      frag.appendChild(head);
+
+      const bars = document.createElement("div");
+      bars.className = "status-bars";
+      bars.appendChild(this.meterBar(18, 19, HP_COLOR));
+      bars.appendChild(this.meterBar(11, 12, () => "#4a7ab8"));
+      frag.appendChild(bars);
+
+      const attrs = document.createElement("div");
+      attrs.className = "status-attrs";
+      for (const idx of [1, 2, 3, 4, 5, 6]) {
+        const val = this.vals.get(idx);
+        if (val === undefined) continue;
+        const cell = document.createElement("div");
+        cell.className = "status-attr";
+        const icon = this.icons.render(ATTR_ICON[idx]!, 20);
+        if (icon) cell.appendChild(icon);
+        cell.appendChild(
+          document.createTextNode(`${(FIELD_FMT[idx] ?? "%s").replace("%s", val).trim()}`),
+        );
+        attrs.appendChild(cell);
+      }
+      frag.appendChild(attrs);
+
+      frag.appendChild(this.line(VITALS, false));
+      const cond = document.createElement("div");
+      cond.className = "status-line";
+      this.appendAlignment(cond);
+      this.appendHungerEncumberConditions(cond);
+      frag.appendChild(cond);
+    } else {
+      const bars = document.createElement("div");
+      bars.className = "status-bars";
+      bars.appendChild(this.meterBar(18, 19, HP_COLOR));
+      frag.appendChild(bars);
+      frag.appendChild(this.line(LINE1, true));
+      frag.appendChild(this.line(LINE2, false));
+    }
     this.el.replaceChildren(frag);
   }
 
   // Qt's status window shows a color-coded HP bar above the title
   // (iflags.wc2_hitpointbar); simplified to 4 tiers instead of Qt's 6 since
   // several of theirs (e.g. "black" at 100%) assume a light-background theme.
-  private hpBar(): HTMLElement {
+  // The same meter renders Pw in fixed blue (Qt draws both bars).
+  private meterBar(idx: number, maxIdx: number, color: (pct: number) => string): HTMLElement {
     const bar = document.createElement("div");
     bar.className = "hp-bar";
-    const hp = Number(this.vals.get(18));
-    const hpmax = Number(this.vals.get(19));
-    if (Number.isFinite(hp) && Number.isFinite(hpmax) && hpmax > 0) {
-      const pct = Math.max(0, Math.min(1, hp / hpmax));
+    const val = Number(this.vals.get(idx));
+    const max = Number(this.vals.get(maxIdx));
+    if (Number.isFinite(val) && Number.isFinite(max) && max > 0) {
+      const pct = Math.max(0, Math.min(1, val / max));
       const fill = document.createElement("div");
       fill.className = "hp-bar-fill";
       fill.style.width = `${pct * 100}%`;
-      fill.style.background =
-        pct >= 0.5 ? "#3a9e3a" : pct >= 0.25 ? "#c9b93a" : pct >= 0.1 ? "#d67f2a" : "#c93a3a";
+      fill.style.background = color(pct);
       bar.appendChild(fill);
     }
     return bar;
   }
 
-  private line(indices: number[], isLine1: boolean): HTMLElement {
+  private line(indices: number[], compactLine1: boolean): HTMLElement {
     const row = document.createElement("div");
     row.className = "status-line";
     for (const idx of indices) {
@@ -151,11 +197,12 @@ export class StatusBar {
       if (icon) row.appendChild(this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val)));
       else row.appendChild(this.text((FIELD_FMT[idx] ?? "%s").replace("%s", val)));
     }
-    if (isLine1) {
-      if (this.layout === "compact") this.appendAlignment(row);
-    } else {
-      if (this.layout === "spread") this.appendAlignment(row);
-      this.appendHungerEncumberConditions(row);
+    // Compact strip: alignment folds up next to Cha on line 1, and hunger/
+    // encumbrance/conditions trail line 2 (the icon-grid layout renders its
+    // own dedicated condition row instead).
+    if (this.layout === "compact") {
+      if (compactLine1) this.appendAlignment(row);
+      else this.appendHungerEncumberConditions(row);
     }
     return row;
   }
@@ -207,7 +254,12 @@ export class StatusBar {
     return span;
   }
 
-  private text(s: string): Text {
-    return document.createTextNode(s);
+  // Bare Text nodes don't wrap as flex items, so plain fields get a chip span
+  // too — that lets a narrow status panel wrap the vitals row cleanly.
+  private text(s: string): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "status-chip";
+    span.textContent = s;
+    return span;
   }
 }

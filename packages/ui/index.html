@@ -3,91 +3,135 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>nethack-universal — Phase 0 spike</title>
+    <title>NetHack</title>
     <style>
-      :root { color-scheme: dark; }
+      /* ---------------------------------------------------------------- *
+       * Design tokens. One dark "dungeon stone + gold" language for the
+       * whole app; every component color below derives from these.
+       * ---------------------------------------------------------------- */
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d10;
+        --panel: #14171c;
+        --panel-2: #1a1e24;
+        --border: #262b33;
+        --border-strong: #3a4250;
+        --text: #d6d9de;
+        --text-dim: #7d8590;
+        --accent: #e9c46a; /* gold */
+        --good: #6fbf73;
+        --warn: #d9a648;
+        --bad: #d96459;
+        --sel: #35406a; /* selection blue */
+        --sel-border: #5a6ab0;
+        --font-ui: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        --font-display: "Iowan Old Style", Palatino, Georgia, serif;
+        --hud-font-size: 14px;
+        /* Splitter-adjustable pane sizes (layout.ts persists these) */
+        --toprow-height: 210px;
+        --sidebar-width: 250px;
+      }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        background: #111;
-        color: #ddd;
-        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-ui);
         display: flex;
         flex-direction: column;
         height: 100vh;
       }
+      button { font: inherit; cursor: pointer; }
+
+      /* ---------------------------------------------------------------- *
+       * Header
+       * ---------------------------------------------------------------- */
       header {
-        padding: 6px 10px;
-        background: #1b1b1b;
+        padding: 5px 12px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
         font-size: 13px;
-        color: #9a9;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
+        flex-shrink: 0;
       }
-      #tilesize { display: flex; align-items: center; gap: 4px; color: #789; }
-      #tilesize button {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: #cdc;
+      #wordmark {
+        font-family: var(--font-display);
+        font-size: 17px;
+        color: var(--accent);
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+      #header-controls { display: flex; align-items: center; gap: 14px; color: var(--text-dim); }
+      .ctl { display: flex; align-items: center; gap: 4px; }
+      .ctl button {
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
         border-radius: 3px;
-        width: 22px;
+        min-width: 22px;
         height: 22px;
-        font: inherit;
-        cursor: pointer;
+        padding: 0 6px;
       }
-      #tilesize button:hover { background: #35406a; }
-      #tilesize button:disabled { opacity: 0.4; cursor: default; }
-      #fontsize { display: flex; align-items: center; gap: 4px; color: #789; }
-      #fontsize button {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: #cdc;
-        border-radius: 3px;
-        width: 22px;
-        height: 22px;
-        font: inherit;
-        cursor: pointer;
-      }
-      #fontsize button:hover { background: #35406a; }
-      #fontsize button:disabled { opacity: 0.4; cursor: default; }
+      .ctl button:hover { background: var(--sel); }
+      .ctl button:disabled { opacity: 0.4; cursor: default; }
       #fontsize-label { min-width: 5em; text-align: center; }
-      #statuslayout { display: flex; align-items: center; gap: 4px; color: #789; }
-      #statuslayout button {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: #cdc;
-        border-radius: 3px;
-        padding: 2px 8px;
-        font: inherit;
-        cursor: pointer;
-      }
-      #statuslayout button:hover { background: #35406a; }
-      #footer {
-        padding: 4px 10px;
-        background: #111;
-        border-top: 1px solid #222;
-        color: #556;
-        font-size: 11px;
-        text-align: center;
-      }
-      #footer a { color: #6a8; }
-      :root { --hud-font-size: 14px; }
-      #status { padding: 4px 10px; background: #161616; color: #cc9; min-height: 1em; font-size: var(--hud-font-size); }
-      .status-line {
+
+      /* ---------------------------------------------------------------- *
+       * Qt-classic arrangement: messages | paperdoll | status on top,
+       * full-width map below (splitters between the bands).
+       * ---------------------------------------------------------------- */
+      #toprow {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        white-space: pre;
+        height: var(--toprow-height);
+        min-height: 110px;
+        flex-shrink: 0;
+        background: var(--panel);
       }
-      .status-chip {
-        display: inline-flex;
-        align-items: center;
-        white-space: pre;
+      #messages {
+        flex: 1;
+        min-width: 0;
+        overflow-y: auto;
+        padding: 6px 10px;
+        font-size: var(--hud-font-size);
+        color: #bcc4bd;
+        border-right: 1px solid var(--border);
       }
-      .status-icon { image-rendering: pixelated; vertical-align: middle; margin-right: 1px; }
-      .hp-bar { height: 4px; background: #2a2a2a; margin-bottom: 3px; }
-      .hp-bar-fill { height: 100%; transition: width 0.2s ease-out; }
+      #messages div { margin: 1px 0; }
+      #paperdoll {
+        width: 178px;
+        flex-shrink: 0;
+        overflow-y: auto;
+        border-right: 1px solid var(--border);
+      }
+      #status {
+        width: 40%;
+        max-width: 560px;
+        min-width: 300px;
+        flex-shrink: 0;
+        overflow-y: auto;
+        padding: 6px 12px;
+        font-size: var(--hud-font-size);
+      }
+
+      .splitter-h {
+        height: 5px;
+        flex-shrink: 0;
+        cursor: row-resize;
+        background: var(--border);
+        border-top: 1px solid var(--border-strong);
+      }
+      .splitter-h:hover, .splitter-v:hover { background: var(--sel-border); }
+      .splitter-v {
+        width: 5px;
+        flex-shrink: 0;
+        cursor: col-resize;
+        background: var(--border);
+        border-left: 1px solid var(--border-strong);
+      }
+
       #main { flex: 1; display: flex; min-height: 0; }
       #mapwrap {
         flex: 1;
@@ -95,61 +139,113 @@
         min-height: 0;
         background: #000;
       }
-      #map {
-        image-rendering: pixelated;
-        display: block;
-      }
+      #map { image-rendering: pixelated; display: block; }
       #sidebar {
-        width: 260px;
+        width: var(--sidebar-width);
         flex-shrink: 0;
         display: flex;
         flex-direction: column;
-        background: #161616;
-        border-left: 1px solid #333;
+        background: var(--panel);
         min-height: 0;
       }
-      #paperdoll { flex-shrink: 0; border-bottom: 1px solid #333; padding: 6px 0; }
-      #perminvent { flex: 1; overflow-y: auto; padding: 6px 0; min-height: 0; }
-      #paperdoll .menu-title,
+      body.sidebar-collapsed #sidebar, body.sidebar-collapsed #vsplit { display: none; }
+      #perminvent { flex: 1; overflow-y: auto; padding: 4px 0; min-height: 0; }
       #perminvent .menu-title {
         padding: 6px 10px;
-        font-size: 12px;
-        color: #889;
-        border-bottom: 1px solid #2a2a2a;
+        font-family: var(--font-display);
+        font-size: 13px;
+        color: var(--accent);
+        border-bottom: 1px solid var(--border);
       }
       #perminvent .menu-row { padding: 2px 10px; font-size: 13px; }
+
+      /* ---------------------------------------------------------------- *
+       * Status panel (Qt's icon-grid status widget)
+       * ---------------------------------------------------------------- */
+      .status-head {
+        font-family: var(--font-display);
+        font-size: 1.25em;
+        color: var(--accent);
+        text-align: center;
+        margin: 2px 0 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .status-bars { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+      .hp-bar { height: 5px; background: var(--panel-2); border-radius: 2px; overflow: hidden; }
+      .hp-bar-fill { height: 100%; transition: width 0.2s ease-out; }
+      .status-attrs {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 4px;
+        margin-bottom: 6px;
+      }
+      .status-attr {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1px;
+        padding: 3px 0 2px;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-size: 0.85em;
+        white-space: nowrap;
+      }
+      .status-attr img { image-rendering: pixelated; }
+      .status-line { display: flex; flex-wrap: wrap; align-items: center; white-space: pre; }
+      .status-chip { display: inline-flex; align-items: center; white-space: pre; }
+      .status-icon { image-rendering: pixelated; vertical-align: middle; margin-right: 1px; }
+
+      /* ---------------------------------------------------------------- *
+       * Footer
+       * ---------------------------------------------------------------- */
+      #footer {
+        padding: 3px 10px;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        color: #4d5560;
+        font-size: 11px;
+        text-align: center;
+        flex-shrink: 0;
+      }
+      #footer a { color: #6a8; }
+
+      /* ---------------------------------------------------------------- *
+       * Paperdoll
+       * ---------------------------------------------------------------- */
+      #paperdoll .menu-title {
+        padding: 5px 10px;
+        font-family: var(--font-display);
+        font-size: 13px;
+        color: var(--accent);
+        border-bottom: 1px solid var(--border);
+      }
       .paperdoll-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 4px;
-        padding: 8px;
+        gap: 3px;
+        padding: 6px;
       }
       .paperdoll-cell {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 2px;
-        padding: 4px 2px;
-        border: 1px solid #2a2a2a;
+        padding: 3px 2px;
+        border: 1px solid var(--border);
         border-radius: 4px;
-        min-height: 44px;
+        min-height: 40px;
         justify-content: center;
       }
       .paperdoll-cell.filled { border-color: #3a4a3a; background: #1c241c; }
       .paperdoll-cell.empty { border-style: dashed; opacity: 0.3; }
-      .paperdoll-label { font-size: 9px; color: #789; text-align: center; line-height: 1.1; }
-      #messages {
-        height: 22vh;
-        overflow-y: auto;
-        padding: 6px 10px;
-        background: #0c0c0c;
-        border-top: 1px solid #333;
-        font-size: var(--hud-font-size);
-        color: #bcb;
-      }
-      #messages div { margin: 1px 0; }
+      .paperdoll-label { font-size: 9px; color: var(--text-dim); text-align: center; line-height: 1.1; }
 
-      /* Menu overlay */
+      /* ---------------------------------------------------------------- *
+       * Menu / prompt / text overlays
+       * ---------------------------------------------------------------- */
       #overlay {
         display: none;
         position: fixed;
@@ -160,8 +256,8 @@
         z-index: 10;
       }
       .menu {
-        background: #1a1a1a;
-        border: 1px solid #444;
+        background: var(--panel);
+        border: 1px solid var(--border-strong);
         border-radius: 6px;
         max-height: 82vh;
         max-width: 82vw;
@@ -171,9 +267,10 @@
       }
       .menu-title {
         padding: 10px 14px;
+        font-family: var(--font-display);
         font-weight: 600;
-        color: #cdc;
-        border-bottom: 1px solid #333;
+        color: var(--accent);
+        border-bottom: 1px solid var(--border);
       }
       .menu-list { overflow-y: auto; padding: 4px 0; }
       .menu-row {
@@ -182,42 +279,37 @@
         gap: 8px;
         padding: 3px 14px;
         font-size: 14px;
-        color: #ccc;
+        color: var(--text);
       }
-      .menu-row.header { color: #889; font-weight: 600; padding-top: 8px; }
+      .menu-row.header { color: var(--text-dim); font-weight: 600; padding-top: 8px; }
       .menu-row.selectable { cursor: pointer; }
       .menu-row.selectable:hover { background: #2b2b3a; }
-      .menu-row.selected { background: #35406a; color: #fff; }
+      .menu-row.selected { background: var(--sel); color: #fff; }
       .menu-accel {
         display: inline-block;
         width: 1.2em;
         text-align: center;
-        color: #e9c46a;
+        color: var(--accent);
         font-weight: 600;
       }
       .menu-row.selected .menu-accel { color: #fff; }
       .menu-tile { image-rendering: pixelated; width: 24px; height: 24px; }
       .menu-text { flex: 1; }
       .extcmd { min-width: 360px; }
-      .extcmd .menu-accel {
-        width: auto;
-        min-width: 7em;
-        text-align: left;
-        color: #e9c46a;
-      }
+      .extcmd .menu-accel { width: auto; min-width: 7em; text-align: left; color: var(--accent); }
       .extcmd .menu-text { color: #99a; }
       .menu-footer {
         padding: 8px 14px;
-        border-top: 1px solid #333;
-        color: #889;
+        border-top: 1px solid var(--border);
+        color: var(--text-dim);
         font-size: 12px;
       }
       .prompt-input {
         margin: 4px 14px 14px;
         padding: 6px 8px;
         min-width: 320px;
-        background: #0c0c0c;
-        border: 1px solid #555;
+        background: var(--bg);
+        border: 1px solid var(--border-strong);
         border-radius: 4px;
         color: #eee;
         font: inherit;
@@ -233,22 +325,9 @@
       }
 
       /* Graphical tombstone (qt_rip.cpp / win/X11/rip.xpm) */
-      .tombstone {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-      }
-      .tombstone-stage {
-        position: relative;
-        width: min(90vw, 800px);
-      }
-      .tombstone-img {
-        width: 100%;
-        image-rendering: pixelated;
-        display: block;
-        border-radius: 4px;
-      }
+      .tombstone { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+      .tombstone-stage { position: relative; width: min(90vw, 800px); }
+      .tombstone-img { width: 100%; image-rendering: pixelated; display: block; border-radius: 4px; }
       .tombstone-text {
         position: absolute;
         width: 26%;
@@ -266,9 +345,9 @@
         font-size: clamp(7px, 1.6vw, 13px);
         white-space: nowrap;
       }
-      .tombstone-footer { color: #889; }
+      .tombstone-footer { color: var(--text-dim); }
 
-      /* Splash screen (Qt shows a title/version splash at startup and character select) */
+      /* Splash screen (Qt shows a title/version splash at startup) */
       #splash {
         position: fixed;
         inset: 0;
@@ -285,10 +364,11 @@
       }
       #splash.hidden { opacity: 0; pointer-events: none; }
       #splash h1 {
-        font-size: 2.6em;
+        font-family: var(--font-display);
+        font-size: 3em;
         margin: 0;
         letter-spacing: 0.04em;
-        color: #e9c46a;
+        color: var(--accent);
         text-shadow: 0 0 18px rgba(233, 196, 106, 0.35);
       }
       #splash .tag { color: #8ab68a; font-size: 1.1em; }
@@ -315,54 +395,58 @@
         background: rgba(5, 8, 5, 0.92);
       }
       .saveselect {
-        background: #161616;
-        border: 1px solid #333;
+        background: var(--panel);
+        border: 1px solid var(--border-strong);
         border-radius: 8px;
         padding: 24px 28px;
-        min-width: 320px;
+        min-width: 340px;
         display: flex;
         flex-direction: column;
         gap: 14px;
         align-items: stretch;
       }
-      .saveselect h2 { margin: 0 0 4px; color: #e9c46a; font-size: 1.2em; text-align: center; }
+      .saveselect h2 {
+        margin: 0 0 2px;
+        font-family: var(--font-display);
+        color: var(--accent);
+        font-size: 1.4em;
+        text-align: center;
+      }
+      /* qt_svsel.cpp header chrome: version + DevTeam attribution */
+      .saveselect-version { text-align: center; color: var(--text-dim); font-size: 0.8em; margin-bottom: 4px; }
       .saveselect-list { display: flex; flex-direction: column; gap: 6px; }
       .saveselect-btn {
-        background: #232323;
-        border: 1px solid #3a3a3a;
-        color: #cdc;
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
         border-radius: 4px;
         padding: 8px 12px;
-        font: inherit;
-        cursor: pointer;
         text-align: left;
       }
-      .saveselect-btn:hover { background: #35406a; }
-      .saveselect-new { display: flex; gap: 8px; border-top: 1px solid #2a2a2a; padding-top: 12px; }
+      .saveselect-btn:hover { background: var(--sel); }
+      .saveselect-new { display: flex; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px; }
       .saveselect-new input {
         flex: 1;
-        background: #0c0c0c;
-        border: 1px solid #444;
+        background: var(--bg);
+        border: 1px solid var(--border-strong);
         border-radius: 4px;
         color: #eee;
         font: inherit;
         padding: 6px 8px;
       }
       .saveselect-new button {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: #cdc;
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
         border-radius: 4px;
         padding: 6px 14px;
-        font: inherit;
-        cursor: pointer;
       }
-      .saveselect-new button:hover { background: #35406a; }
+      .saveselect-new button:hover { background: var(--sel); }
 
       /* Character picker (qt_plsel.cpp) — shares the #saveselect overlay */
       .charpick {
-        background: #161616;
-        border: 1px solid #333;
+        background: var(--panel);
+        border: 1px solid var(--border-strong);
         border-radius: 8px;
         padding: 22px 26px;
         max-width: min(92vw, 720px);
@@ -372,97 +456,97 @@
         flex-direction: column;
         gap: 14px;
       }
-      .charpick h2 { margin: 0; color: #e9c46a; font-size: 1.2em; text-align: center; }
+      .charpick h2 {
+        margin: 0;
+        font-family: var(--font-display);
+        color: var(--accent);
+        font-size: 1.4em;
+        text-align: center;
+      }
       .charpick-name { display: flex; align-items: center; gap: 10px; }
-      .charpick-name label { color: #789; }
+      .charpick-name label { color: var(--text-dim); }
       .charpick-name input {
         flex: 1;
-        background: #0c0c0c;
-        border: 1px solid #444;
+        background: var(--bg);
+        border: 1px solid var(--border-strong);
         border-radius: 4px;
         color: #eee;
         font: inherit;
         padding: 6px 8px;
       }
       .charpick-name input:focus { outline: none; border-color: #6a7; }
-      .charpick-roles {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 6px;
-      }
+      .charpick-roles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
       .charpick-card {
         display: flex;
         align-items: center;
         gap: 8px;
-        background: #1e1e1e;
-        border: 1px solid #333;
+        background: var(--panel-2);
+        border: 1px solid var(--border);
         border-radius: 5px;
-        color: #ccc;
-        font: inherit;
+        color: var(--text);
         padding: 5px 8px;
-        cursor: pointer;
         text-transform: capitalize;
         text-align: left;
       }
       .charpick-card:hover:not(:disabled) { background: #2b2b3a; }
-      .charpick-card.selected { background: #35406a; border-color: #5a6ab0; color: #fff; }
+      .charpick-card.selected { background: var(--sel); border-color: var(--sel-border); color: #fff; }
       .charpick-card:disabled { opacity: 0.25; cursor: default; }
       .charpick-portrait { image-rendering: pixelated; width: 32px; height: 32px; flex-shrink: 0; }
       .charpick-bottom { display: flex; gap: 14px; align-items: flex-start; }
       .charpick-section { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-      .charpick-section-label { color: #789; font-size: 12px; }
+      .charpick-section-label { color: var(--text-dim); font-size: 12px; }
       .charpick-section-body { display: flex; flex-direction: column; gap: 5px; }
-      .charpick-summary {
-        text-align: center;
-        color: #8ab68a;
-        font-style: italic;
-        min-height: 1.2em;
-      }
+      .charpick-summary { text-align: center; color: #8ab68a; font-style: italic; min-height: 1.2em; }
       .charpick-footer { display: flex; justify-content: center; gap: 10px; }
       .charpick-footer button {
-        background: #2a2a2a;
-        border: 1px solid #444;
-        color: #cdc;
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
         border-radius: 4px;
         padding: 7px 22px;
-        font: inherit;
-        cursor: pointer;
       }
-      .charpick-footer button:hover { background: #35406a; }
+      .charpick-footer button:hover { background: var(--sel); }
       .charpick-footer button.primary { background: #2e4a2e; border-color: #4a6; color: #dfd; }
       .charpick-footer button.primary:hover { background: #3a6a3a; }
     </style>
   </head>
   <body>
     <header>
-      <span>nethack-universal — arrows move · letters = commands · i = inventory · S = save</span>
-      <span style="display: flex; gap: 16px">
-        <span id="fontsize">
+      <span id="wordmark">NetHack</span>
+      <span id="header-controls">
+        <span class="ctl" id="fontsize">
           Font
           <button id="fontsize-dec" type="button" aria-label="Smaller font">−</button>
           <span id="fontsize-label">Medium</span>
           <button id="fontsize-inc" type="button" aria-label="Larger font">+</button>
         </span>
-        <span id="tilesize">
-          Tile size
+        <span class="ctl" id="tilesize">
+          Tiles
           <button id="tilesize-dec" type="button" aria-label="Smaller tiles">−</button>
           <button id="tilesize-inc" type="button" aria-label="Larger tiles">+</button>
         </span>
-        <span id="statuslayout">
+        <span class="ctl" id="statuslayout">
           Status
-          <button id="statuslayout-toggle" type="button">Compact</button>
+          <button id="statuslayout-toggle" type="button">Grid</button>
+        </span>
+        <span class="ctl">
+          <button id="sidebar-toggle" type="button" title="Show/hide the inventory panel">Inventory</button>
         </span>
       </span>
     </header>
-    <div id="status"></div>
+    <div id="toprow">
+      <div id="messages"></div>
+      <div id="paperdoll"></div>
+      <div id="status"></div>
+    </div>
+    <div id="hsplit" class="splitter-h" title="Drag to resize"></div>
     <div id="main">
       <div id="mapwrap"><canvas id="map" width="1280" height="336"></canvas></div>
+      <div id="vsplit" class="splitter-v" title="Drag to resize"></div>
       <div id="sidebar">
-        <div id="paperdoll"></div>
         <div id="perminvent"></div>
       </div>
     </div>
-    <div id="messages"></div>
     <footer id="footer">
       NetHack is © the NetHack DevTeam, licensed under the
       <a id="license-link" href="#" target="_blank" rel="noopener">NetHack General Public License</a>.
@@ -473,7 +557,7 @@
     <div id="splash">
       <h1>NetHack</h1>
       <div class="tag">universal</div>
-      <div class="version">NetHack 5.0.0 · browser port</div>
+      <div class="version">NetHack 5.0.0 · browser port · by the NetHack DevTeam</div>
       <div class="hint">press any key or click to begin</div>
     </div>
     <script type="module" src="/src/main.ts"></script>

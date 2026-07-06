@@ -27,6 +27,12 @@ export class SaveSelectController {
       title.textContent = "Choose your adventurer";
       root.appendChild(title);
 
+      // qt_svsel.cpp header chrome: version string + DevTeam attribution.
+      const version = document.createElement("div");
+      version.className = "saveselect-version";
+      version.textContent = "NetHack 5.0.0 · by the NetHack DevTeam";
+      root.appendChild(version);
+
       if (existing.length) {
         const list = document.createElement("div");
         list.className = "saveselect-list";
