@@ -252,6 +252,21 @@
       .status-line { display: flex; flex-wrap: wrap; align-items: center; white-space: pre; }
       .status-chip { display: inline-flex; align-items: center; white-space: pre; }
       .status-icon { image-rendering: pixelated; vertical-align: middle; margin-right: 1px; }
+      /* Change-flash (qt_stat.cpp): green improved, red worsened, blue changed */
+      .flash-up { color: var(--good); }
+      .flash-down { color: var(--bad); }
+      .flash-changed { color: #8fb8ff; }
+      .status-attr.flash-up { border-color: var(--good); }
+      .status-attr.flash-down { border-color: var(--bad); }
+      .status-attr.flash-changed { border-color: #8fb8ff; }
+
+      /* Blocking --More-- acknowledgment (qt_bind.cpp qt_more) */
+      .more-chip {
+        display: inline-block;
+        color: var(--accent);
+        font-weight: 700;
+        animation: splash-pulse 1.2s ease-in-out infinite;
+      }
 
       /* ---------------------------------------------------------------- *
        * Footer

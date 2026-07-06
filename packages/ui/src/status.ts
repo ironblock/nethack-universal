@@ -93,29 +93,77 @@ const ALIGN_ICON: Record<string, string> = { lawful: "lawful", neutral: "neutral
 // "compact" is the dense two-text-line strip (Qt's statuslines:2 analog).
 export type StatusLayout = "compact" | "spread";
 
+// Change-flash (qt_stat.cpp's green/red field highlighting): how a changed
+// field is tinted, and for how many BL_FLUSH renders it stays tinted (Qt
+// fades after ~3 keystrokes).
+type FlashDir = "up" | "down" | "changed";
+const FLASH_TTL = 3;
+// Fields where flashing is noise: title, score, time, exp-points (T changes
+// every turn; Xp level [13] still flashes).
+const NO_FLASH = new Set([0, 8, 16, 21]);
+// Fields where a numeric DECREASE is good (armor class).
+const INVERTED = new Set([14]);
+
 export class StatusBar {
   private vals = new Map<number, string>();
   private conditionMask = 0;
   private layout: StatusLayout = "spread";
+  private flash = new Map<number, { dir: FlashDir; ttl: number }>();
+  private condFlash = { bits: 0, ttl: 0 };
+  private seenFirstFlush = false;
 
   constructor(
     private el: HTMLElement,
     private icons: StatusIcons,
   ) {}
 
+  /** Raw cached value of a field (for cross-component reads like the map cursor HP tint). */
+  value(idx: number): string | undefined {
+    return this.vals.get(idx);
+  }
+
   update(idx: number, val: string): void {
     // NetHack embeds glyphs in mixed text as "\G%04X%04X" (rndencode + glyph).
     // On the status line this only occurs for gold; render it as "$".
     const clean = val.replace(/\\G[0-9A-Fa-f]{8}/g, idx === 10 ? "$" : "");
+    const prev = this.vals.get(idx);
     this.vals.set(idx, clean);
+
+    // Qt flashes fields green (improved) / red (worsened) for a few updates.
+    // Only after the first full render — the initial burst isn't a "change".
+    if (!this.seenFirstFlush || NO_FLASH.has(idx) || prev === undefined || prev === clean) return;
+    const a = parseFloat(prev);
+    const b = parseFloat(clean);
+    let dir: FlashDir = "changed";
+    if (Number.isFinite(a) && Number.isFinite(b) && a !== b) {
+      dir = b > a !== INVERTED.has(idx) ? "up" : "down";
+    }
+    this.flash.set(idx, { dir, ttl: FLASH_TTL });
   }
 
   setCondition(mask: number): void {
+    // Newly-set condition bits flash on appearance (qt_stat.cpp).
+    const fresh = mask & ~this.conditionMask;
+    if (this.seenFirstFlush && fresh) this.condFlash = { bits: fresh, ttl: FLASH_TTL };
     this.conditionMask = mask;
   }
 
   setLayout(layout: StatusLayout): void {
     this.layout = layout;
+  }
+
+  /** CSS class for a field's pending change-flash, consuming nothing. */
+  private flashClass(idx: number): string {
+    const f = this.flash.get(idx);
+    return f ? `flash-${f.dir}` : "";
+  }
+
+  /** Age out flash state by one render (called once per BL_FLUSH render). */
+  private decayFlash(): void {
+    for (const [idx, f] of this.flash) {
+      if (--f.ttl <= 0) this.flash.delete(idx);
+    }
+    if (this.condFlash.ttl > 0 && --this.condFlash.ttl <= 0) this.condFlash.bits = 0;
   }
 
   render(): void {
@@ -141,6 +189,8 @@ export class StatusBar {
         if (val === undefined) continue;
         const cell = document.createElement("div");
         cell.className = "status-attr";
+        const fc = this.flashClass(idx);
+        if (fc) cell.classList.add(fc);
         const icon = this.icons.render(ATTR_ICON[idx]!, 20);
         if (icon) cell.appendChild(icon);
         cell.appendChild(
@@ -165,6 +215,8 @@ export class StatusBar {
       frag.appendChild(this.line(LINE2, false));
     }
     this.el.replaceChildren(frag);
+    this.decayFlash();
+    this.seenFirstFlush = true;
   }
 
   // Qt's status window shows a color-coded HP bar above the title
@@ -194,8 +246,12 @@ export class StatusBar {
       const val = this.vals.get(idx);
       if (!val) continue;
       const icon = ATTR_ICON[idx];
-      if (icon) row.appendChild(this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val)));
-      else row.appendChild(this.text((FIELD_FMT[idx] ?? "%s").replace("%s", val)));
+      const chip = icon
+        ? this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val))
+        : this.text((FIELD_FMT[idx] ?? "%s").replace("%s", val));
+      const fc = this.flashClass(idx);
+      if (fc) chip.classList.add(fc);
+      row.appendChild(chip);
     }
     // Compact strip: alignment folds up next to Cha on line 1, and hunger/
     // encumbrance/conditions trail line 2 (the icon-grid layout renders its
@@ -232,7 +288,9 @@ export class StatusBar {
 
     for (const [bit, name, icon] of CONDITIONS) {
       if (!(this.conditionMask & bit)) continue;
-      row.appendChild(icon ? this.iconChip(icon, ` ${name}`) : this.text(` ${name}`));
+      const chip = icon ? this.iconChip(icon, ` ${name}`) : this.text(` ${name}`);
+      if (this.condFlash.bits & bit) chip.classList.add("flash-changed");
+      row.appendChild(chip);
     }
   }
 

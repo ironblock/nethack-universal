@@ -127,12 +127,20 @@ export class NetHackUI {
       }
       case "shim_display_nhwindow": {
         const window = args[0] as number;
-        if (this.windowType.get(window) === NHW.TEXT) {
+        const blocking = args[1] as number | boolean;
+        const type = this.windowType.get(window);
+        if (type === NHW.TEXT) {
           const lines = this.textBuffers.get(window);
           if (lines?.length) {
             if (TombstoneController.isTombstone(lines)) await this.tombstoneCtl.show(lines);
             else await this.textWinCtl.show(lines);
           }
+        } else if (blocking && (type === NHW.MESSAGE || type === NHW.MAP)) {
+          // Qt appends "--More--" and blocks for space/Enter/Esc (qt_more,
+          // qt_bind.cpp:766-838); same for "press a key when done viewing
+          // the map". Without this, MSGTYPE=stop bursts and level feelings
+          // scroll past unacknowledged.
+          await this.more();
         }
         return;
       }
@@ -318,8 +326,10 @@ export class NetHackUI {
         return 0;
 
       case "shim_curs": {
-        // Cursor placement on the map window ≈ the hero's cell; follow it.
+        // Cursor placement on the map window: draw the HP-colored cursor
+        // rectangle there (qt_map.cpp) and keep the viewport following it.
         if (this.windowType.get(args[0] as number) === NHW.MAP) {
+          this.renderer.setCursor(args[1] as number, args[2] as number);
           this.renderer.centerOn(args[1] as number, args[2] as number);
         }
         return;
@@ -338,7 +348,16 @@ export class NetHackUI {
         } else if (idx === BL_CONDITION) {
           if (ptr) this.status.setCondition(this.mod.getValue(ptr, "i32"));
         } else if (ptr) {
-          this.status.update(idx, this.mod.UTF8ToString(ptr));
+          const val = this.mod.UTF8ToString(ptr);
+          this.status.update(idx, val);
+          // Keep the map cursor's HP tint current (BL_HP=18 / BL_HPMAX=19).
+          if (idx === 18 || idx === 19) {
+            const hp = Number(this.status.value(18));
+            const hpmax = Number(this.status.value(19));
+            if (Number.isFinite(hp) && Number.isFinite(hpmax)) {
+              this.renderer.setCursorHealth(hp, hpmax);
+            }
+          }
         }
         return;
       }
@@ -382,5 +401,19 @@ export class NetHackUI {
     el.textContent = line;
     this.dom.messages.appendChild(el);
     this.dom.messages.scrollTop = this.dom.messages.scrollHeight;
+  }
+
+  /** Append a --More-- chip to the message log and wait for space/Enter/Esc. */
+  private async more(): Promise<void> {
+    const chip = document.createElement("div");
+    chip.className = "more-chip";
+    chip.textContent = "--More--";
+    this.dom.messages.appendChild(chip);
+    this.dom.messages.scrollTop = this.dom.messages.scrollHeight;
+    for (;;) {
+      const key = await this.input.nextKey();
+      if (key === 32 || key === 13 || key === 10 || key === 27) break;
+    }
+    chip.remove();
   }
 }

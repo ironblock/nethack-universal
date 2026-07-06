@@ -48,6 +48,8 @@ export class TileRenderer {
   private cells = new Int32Array(COLNO * ROWNO).fill(-1);
   private cellMarks = new Uint8Array(COLNO * ROWNO); // 0=none, see MARK_CODE
   private lastCenter = { x: 0, y: 0 };
+  private cursor = { x: -1, y: -1 };
+  private hp = { cur: -1, max: -1 }; // for the cursor's HP color (qt_map.cpp)
 
   /** Pixel size of one rendered tile (backing store). 2× source for readability. */
   renderSize = 32;
@@ -123,6 +125,62 @@ export class TileRenderer {
     });
   }
 
+  /**
+   * Move the map cursor (Qt draws a rect outline at the core's curs()
+   * position, colored by HP% — qt_map.cpp:227-250). This is how you see the
+   * hero, and critically the roving cursor during farlook/position picks.
+   */
+  setCursor(x: number, y: number): void {
+    const { x: ox, y: oy } = this.cursor;
+    if (ox === x && oy === y) {
+      this.drawCursor();
+      return;
+    }
+    this.cursor = { x, y };
+    // Erase the old outline by redrawing that cell from the glyph cache.
+    if (ox >= 0 && oy >= 0) this.redrawCell(ox, oy);
+    this.drawCursor();
+  }
+
+  /** Feed HP for the cursor color (wired from status updates). */
+  setCursorHealth(cur: number, max: number): void {
+    this.hp = { cur, max };
+  }
+
+  private drawCursor(): void {
+    const { x, y } = this.cursor;
+    if (x < 0 || x >= COLNO || y < 0 || y >= ROWNO) return;
+    const d = this.renderSize;
+    const { cur, max } = this.hp;
+    const hp100 = max > 0 ? (cur * 100) / max : 100;
+    // Same thresholds as Qt's cursor (distinct from the hitpoint bar's).
+    const color =
+      max <= 0 ? "#fff"
+      : hp100 < 10 || cur < 5 ? "#d06bd0"
+      : hp100 < 25 || cur < 10 ? "#d94f4f"
+      : hp100 < 50 ? "#ffbf00"
+      : hp100 < 75 ? "#e8e84a"
+      : "#fff";
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(x * d + 0.5, y * d + 0.5, d - 1, d - 1);
+  }
+
+  private redrawCell(x: number, y: number): void {
+    const idx = y * COLNO + x;
+    const glyph = this.cells[idx] ?? -1;
+    const dx = x * this.renderSize;
+    const dy = y * this.renderSize;
+    if (glyph < 0) {
+      this.ctx.fillStyle = "#000";
+      this.ctx.fillRect(dx, dy, this.renderSize, this.renderSize);
+      return;
+    }
+    this.blit(this.ctx, glyph, dx, dy, this.renderSize);
+    const markCode = this.cellMarks[idx] ?? 0;
+    this.drawMark(dx, dy, this.renderSize, markCode === 1 ? "pet" : markCode === 2 ? "pile" : undefined);
+  }
+
   /** Scroll the map's scroll container so cell (x, y) is centred (follow the hero). */
   centerOn(x: number, y: number): void {
     this.lastCenter = { x, y };
@@ -171,6 +229,7 @@ export class TileRenderer {
         this.drawMark(dx, dy, this.renderSize, markCode === 1 ? "pet" : markCode === 2 ? "pile" : undefined);
       }
     }
+    this.drawCursor();
     this.centerOn(this.lastCenter.x, this.lastCenter.y);
   }
 
