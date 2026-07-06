@@ -20,6 +20,7 @@ import type { TextWindowController } from "./textwindow";
 import type { ExtCmdController } from "./extcmd";
 import type { StatusIcons } from "./statusicons";
 import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
+import type { StatusLayout } from "./status";
 
 // include/wintype.h
 const NHW = { MESSAGE: 1, STATUS: 2, MAP: 3, MENU: 4, TEXT: 5, PERMINVENT: 6 } as const;
@@ -83,6 +84,12 @@ export class NetHackUI {
     this.permInvent = permInvent;
     this.extCmdCtl = extCmdCtl;
     this.status = new StatusBar(dom.status, statusIcons);
+  }
+
+  /** Qt's statuslines:2 ("compact") vs :3 ("spread") — see status.ts. */
+  setStatusLayout(layout: StatusLayout): void {
+    this.status.setLayout(layout);
+    this.status.render();
   }
 
   /** Set true to trace every window-proc call to the console (capped). */

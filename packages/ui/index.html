@@ -52,6 +52,17 @@
       #fontsize button:hover { background: #35406a; }
       #fontsize button:disabled { opacity: 0.4; cursor: default; }
       #fontsize-label { min-width: 5em; text-align: center; }
+      #statuslayout { display: flex; align-items: center; gap: 4px; color: #789; }
+      #statuslayout button {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        color: #cdc;
+        border-radius: 3px;
+        padding: 2px 8px;
+        font: inherit;
+        cursor: pointer;
+      }
+      #statuslayout button:hover { background: #35406a; }
       :root { --hud-font-size: 14px; }
       #status { padding: 4px 10px; background: #161616; color: #cc9; min-height: 1em; font-size: var(--hud-font-size); }
       .status-line {
@@ -239,6 +250,10 @@
           Tile size
           <button id="tilesize-dec" type="button" aria-label="Smaller tiles">−</button>
           <button id="tilesize-inc" type="button" aria-label="Larger tiles">+</button>
+        </span>
+        <span id="statuslayout">
+          Status
+          <button id="statuslayout-toggle" type="button">Compact</button>
         </span>
       </span>
     </header>

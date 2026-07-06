@@ -19,6 +19,7 @@ import { TextWindowController } from "./textwindow";
 import { ExtCmdController } from "./extcmd";
 import { StatusIcons } from "./statusicons";
 import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
+import type { StatusLayout } from "./status";
 
 const TILE_SIZE_STEP = 8;
 // Qt's Settings dialog offers Tiny/Small/Medium/Large/Huge for message+status text.
@@ -62,6 +63,7 @@ async function boot(): Promise<void> {
   attachKeyboard(ui.input);
   // Click a map cell to travel there (left) or look (right).
   renderer.onCellClick((x, y, button) => ui.input.push({ kind: "mouse", x, y, button }));
+  wireStatusLayoutControl(ui);
 
   // Emscripten ES6 module: default export is the factory. It lives in /public
   // and is served as-is; hide the specifier from Vite's import-analysis so the
@@ -175,6 +177,17 @@ function wireFontSizeControls(): void {
     apply();
   });
   apply();
+}
+
+/** Qt's iflags.wc2_statuslines (2="compact"/3="spread") — see status.ts. */
+function wireStatusLayoutControl(ui: NetHackUI): void {
+  const toggle = byId("statuslayout-toggle") as HTMLButtonElement;
+  let layout: StatusLayout = "compact";
+  toggle.addEventListener("click", () => {
+    layout = layout === "compact" ? "spread" : "compact";
+    toggle.textContent = layout === "compact" ? "Compact" : "Spread";
+    ui.setStatusLayout(layout);
+  });
 }
 
 /** Qt shows a version/attribution splash at startup and character select. */

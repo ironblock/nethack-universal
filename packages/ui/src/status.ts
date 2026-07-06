@@ -83,9 +83,15 @@ const CONDITIONS: Array<[number, string, string?]> = [
 
 const ALIGN_ICON: Record<string, string> = { lawful: "lawful", neutral: "neutral", chaotic: "chaotic" };
 
+// Qt's iflags.wc2_statuslines: 2 ("compact") folds Alignment up next to Cha;
+// 3 ("spread", upstream default) shows it with Hunger/Encumbrance/Conditions
+// instead. We default to compact (denser, matches what we shipped earlier).
+export type StatusLayout = "compact" | "spread";
+
 export class StatusBar {
   private vals = new Map<number, string>();
   private conditionMask = 0;
+  private layout: StatusLayout = "compact";
 
   constructor(
     private el: HTMLElement,
@@ -101,6 +107,10 @@ export class StatusBar {
 
   setCondition(mask: number): void {
     this.conditionMask = mask;
+  }
+
+  setLayout(layout: StatusLayout): void {
+    this.layout = layout;
   }
 
   render(): void {
@@ -131,7 +141,7 @@ export class StatusBar {
     return bar;
   }
 
-  private line(indices: number[], withAlignAndConditions: boolean): HTMLElement {
+  private line(indices: number[], isLine1: boolean): HTMLElement {
     const row = document.createElement("div");
     row.className = "status-line";
     for (const idx of indices) {
@@ -141,8 +151,12 @@ export class StatusBar {
       if (icon) row.appendChild(this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val)));
       else row.appendChild(this.text((FIELD_FMT[idx] ?? "%s").replace("%s", val)));
     }
-    if (withAlignAndConditions) this.appendAlignment(row);
-    else this.appendHungerEncumberConditions(row);
+    if (isLine1) {
+      if (this.layout === "compact") this.appendAlignment(row);
+    } else {
+      if (this.layout === "spread") this.appendAlignment(row);
+      this.appendHungerEncumberConditions(row);
+    }
     return row;
   }
 
