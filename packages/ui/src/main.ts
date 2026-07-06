@@ -70,16 +70,19 @@ async function boot(): Promise<void> {
 
   // Menubar + toolbar (qt_main.cpp): items dispatch extended commands by
   // priming the '#' palette, gated on the core waiting at a command prompt.
+  const dispatchCommand = (cmd: string): boolean => {
+    if (!ui.awaitingCommand) return false;
+    if (cmd !== "#" && !extCmdCtl.prime(cmd)) return false;
+    ui.input.pushKey("#".charCodeAt(0));
+    return true;
+  };
   wireMenubar(byId("menubar"), byId("toolbar"), {
     baseUrl: BASE_URL,
     hasCommand: (cmd) => cmd === "#" || extCmdCtl.has(cmd),
-    dispatch: (cmd) => {
-      if (!ui.awaitingCommand) return false;
-      if (cmd !== "#" && !extCmdCtl.prime(cmd)) return false;
-      ui.input.pushKey("#".charCodeAt(0));
-      return true;
-    },
+    dispatch: dispatchCommand,
   });
+  // Clicking the equipment doll shows what's in use (qt_inv.cpp → #seeall).
+  paperdoll.onClick = () => void dispatchCommand("seeall");
 
   // Emscripten ES6 module: default export is the factory. It lives in /public
   // and is served as-is; hide the specifier from Vite's import-analysis so the

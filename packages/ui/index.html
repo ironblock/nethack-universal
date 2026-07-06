@@ -346,6 +346,11 @@
       }
       .paperdoll-cell.filled { border-color: #3a4a3a; background: #1c241c; }
       .paperdoll-cell.empty { border-style: dashed; opacity: 0.3; }
+      /* Known BUC state tints the slot border (qt_inv.cpp) */
+      .paperdoll-cell.buc-blessed { border-color: var(--good); }
+      .paperdoll-cell.buc-cursed { border-color: var(--bad); }
+      .paperdoll-cell.buc-uncursed { border-color: var(--border-strong); }
+      #paperdoll { cursor: pointer; }
       .paperdoll-label { font-size: 9px; color: var(--text-dim); text-align: center; line-height: 1.1; }
 
       /* ---------------------------------------------------------------- *
