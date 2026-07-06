@@ -92,10 +92,15 @@ export class NetHackUI {
     this.extCmdCtl = extCmdCtl;
     this.tombstoneCtl = tombstoneCtl;
     this.status = new StatusBar(dom.status, statusIcons);
+    this.status.setLayout(this.pendingLayout);
   }
 
-  /** Qt's statuslines:2 ("compact") vs :3 ("spread") — see status.ts. */
+  private pendingLayout: StatusLayout = "spread";
+
+  /** Qt's statuslines analog — safe to call before bind() (boot-time apply). */
   setStatusLayout(layout: StatusLayout): void {
+    this.pendingLayout = layout;
+    if (!this.status) return;
     this.status.setLayout(layout);
     this.status.render();
   }

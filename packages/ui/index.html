@@ -132,7 +132,39 @@
       }
       .ctl button:hover { background: var(--sel); }
       .ctl button:disabled { opacity: 0.4; cursor: default; }
-      #fontsize-label { min-width: 5em; text-align: center; }
+
+      /* Settings dialog (qt_set.cpp) */
+      .settings { min-width: 420px; }
+      .settings-body { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; }
+      .settings-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 4px 0;
+      }
+      .settings-row button {
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+        border-radius: 3px;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 8px;
+      }
+      .settings-row button:hover { background: var(--sel); }
+      .settings-value { min-width: 4.5em; text-align: center; color: var(--text-dim); }
+      .settings-row input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+      .settings-footer { display: flex; justify-content: flex-end; }
+      .settings-footer button {
+        background: var(--panel-2);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+        border-radius: 4px;
+        padding: 5px 18px;
+      }
+      .settings-footer button:hover { background: var(--sel); }
+      body.paperdoll-hidden #paperdoll { display: none; }
 
       /* ---------------------------------------------------------------- *
        * Qt-classic arrangement: messages | paperdoll | status on top,
@@ -625,23 +657,11 @@
       <span id="toolbar"></span>
       <span style="flex: 1"></span>
       <span id="header-controls">
-        <span class="ctl" id="fontsize">
-          Font
-          <button id="fontsize-dec" type="button" aria-label="Smaller font">−</button>
-          <span id="fontsize-label">Medium</span>
-          <button id="fontsize-inc" type="button" aria-label="Larger font">+</button>
-        </span>
-        <span class="ctl" id="tilesize">
-          Tiles
-          <button id="tilesize-dec" type="button" aria-label="Smaller tiles">−</button>
-          <button id="tilesize-inc" type="button" aria-label="Larger tiles">+</button>
-        </span>
-        <span class="ctl" id="statuslayout">
-          Status
-          <button id="statuslayout-toggle" type="button">Grid</button>
-        </span>
         <span class="ctl">
           <button id="sidebar-toggle" type="button" title="Show/hide the inventory panel">Inventory</button>
+        </span>
+        <span class="ctl">
+          <button id="settings-btn" type="button" title="Settings" aria-label="Settings">⚙</button>
         </span>
       </span>
     </header>
