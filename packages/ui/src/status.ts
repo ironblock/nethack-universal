@@ -105,9 +105,30 @@ export class StatusBar {
 
   render(): void {
     const frag = document.createDocumentFragment();
+    frag.appendChild(this.hpBar());
     frag.appendChild(this.line(LINE1, true));
     frag.appendChild(this.line(LINE2, false));
     this.el.replaceChildren(frag);
+  }
+
+  // Qt's status window shows a color-coded HP bar above the title
+  // (iflags.wc2_hitpointbar); simplified to 4 tiers instead of Qt's 6 since
+  // several of theirs (e.g. "black" at 100%) assume a light-background theme.
+  private hpBar(): HTMLElement {
+    const bar = document.createElement("div");
+    bar.className = "hp-bar";
+    const hp = Number(this.vals.get(18));
+    const hpmax = Number(this.vals.get(19));
+    if (Number.isFinite(hp) && Number.isFinite(hpmax) && hpmax > 0) {
+      const pct = Math.max(0, Math.min(1, hp / hpmax));
+      const fill = document.createElement("div");
+      fill.className = "hp-bar-fill";
+      fill.style.width = `${pct * 100}%`;
+      fill.style.background =
+        pct >= 0.5 ? "#3a9e3a" : pct >= 0.25 ? "#c9b93a" : pct >= 0.1 ? "#d67f2a" : "#c93a3a";
+      bar.appendChild(fill);
+    }
+    return bar;
   }
 
   private line(indices: number[], withAlignAndConditions: boolean): HTMLElement {
