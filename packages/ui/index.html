@@ -186,7 +186,10 @@
         color: #bcc4bd;
         border-right: 1px solid var(--border);
       }
-      #messages div { margin: 1px 0; }
+      /* Older messages fade back; the current turn's stay bright (qt_msg.cpp) */
+      #messages div { margin: 1px 0; color: #7e857f; }
+      #messages div.msg-new { color: #cfd8d0; }
+      .textwin-hit { background: var(--sel); color: #fff; }
       #paperdoll {
         width: 178px;
         flex-shrink: 0;

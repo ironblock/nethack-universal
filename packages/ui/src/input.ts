@@ -131,6 +131,16 @@ export function attachKeyboard(queue: InputQueue): void {
       return;
     }
 
+    // PageUp/PageDown scroll the message log (Qt's global key handling).
+    if (e.key === "PageUp" || e.key === "PageDown") {
+      const log = document.getElementById("messages");
+      if (log) {
+        e.preventDefault();
+        log.scrollTop += (e.key === "PageUp" ? -0.9 : 0.9) * log.clientHeight;
+      }
+      return;
+    }
+
     // Special keys the core cares about.
     if (e.key === "Enter") return queue.pushKey(13);
     if (e.key === "Escape") return queue.pushKey(27);

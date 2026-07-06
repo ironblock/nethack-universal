@@ -141,10 +141,12 @@ async function boot(): Promise<void> {
   // the static prefs — on top as extra options. Persisted settings always
   // contribute lines; a new character adds its role/race/gender/align.
   let rc = settingsRcLines(settings);
+  let resuming = false;
   for (;;) {
     const save = await saveSelectCtl.choose(storage.listSaves());
     if (save.kind === "resume") {
       playerName = save.name;
+      resuming = true;
       break;
     }
     const choice = await charPickCtl.pick(save.name);
@@ -155,8 +157,13 @@ async function boot(): Promise<void> {
   }
   m.FS.writeFile("/home/web_user/.nethackrc", rc);
   m.ENV.USER = playerName;
+  ui.playerName = playerName;
 
   ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl, statusIcons, tombstoneCtl, paperdoll);
+  // Message-log continuity across save/resume lives UI-side (see
+  // shim_getmsghistory in nethack.ts for why the core can't carry it).
+  if (resuming) ui.restoreMessageHistory();
+  else ui.clearMessageHistory();
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 

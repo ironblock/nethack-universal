@@ -189,8 +189,35 @@ export class NetHackUI {
         return;
       }
       case "shim_putmsghistory": {
+        // Restores saved-game message history (and receives synthetic
+        // "remembered" lines). They're history, not fresh news — log dim,
+        // but keep them in msgHistory so they survive the NEXT save too.
         const str = args[0] as string;
-        if (str) this.log(str);
+        if (str) {
+          this.log(str, true);
+          this.msgHistory.push(str);
+        }
+        return;
+      }
+      case "shim_getmsghistory":
+        // MUST stay "": the shim's string-return marshaling writes the
+        // returned bytes over the 4-byte `char *ret` stack slot
+        // (setPointerValue case "s" → stringToUTF8(value, ret_ptr, 1024),
+        // libnhmain.c — the in-tree "danger will robinson" TODO), so any
+        // non-empty return smashes the shim's stack and wedges Asyncify
+        // mid-save. Message-history persistence is done UI-side instead:
+        // exit_nhwindows stores the log per adventurer (localStorage) and
+        // main.ts replays it on resume — same player-visible outcome as
+        // Qt's save-file history, different channel.
+        return "";
+      case "shim_doprev_message":
+        // ^P: Qt scrolls the message window back; page the log up.
+        this.dom.messages.scrollTop -= this.dom.messages.clientHeight * 0.9;
+        return 0;
+      case "shim_display_file": {
+        // Help files live inside the core's dlb archive, which JS can't
+        // read; an honest notice beats silently ignoring '?' entries.
+        this.log(`[The text of "${args[0] as string}" isn't available in the browser port yet.]`, true);
         return;
       }
 
@@ -205,6 +232,9 @@ export class NetHackUI {
         this.awaitingCommand = true;
         const ev = await this.input.next();
         this.awaitingCommand = false;
+        // The player acted: messages logged so far stop being "new" once the
+        // next one arrives (Qt's newest-message bold / turn unhighlight).
+        this.msgTurnBoundary = true;
         if (ev.kind === "mouse") {
           if (xPtr) this.mod.setValue(xPtr, ev.x, "i16");
           if (yPtr) this.mod.setValue(yPtr, ev.y, "i16");
@@ -368,7 +398,10 @@ export class NetHackUI {
       }
 
       case "shim_exit_nhwindows":
-        // Game is ending (save / quit / death) — flush the save/record to IndexedDB.
+        // Game is ending (save / quit / death) — flush the save/record to
+        // IndexedDB, and stash the message log for resume (see
+        // shim_getmsghistory for why the core can't carry it).
+        this.saveMessageHistory();
         await this.storage.save();
         return;
 
@@ -378,7 +411,6 @@ export class NetHackUI {
       case "shim_get_nh_event":
       case "shim_suspend_nhwindows":
       case "shim_resume_nhwindows":
-      case "shim_display_file":
       case "shim_mark_synch":
       case "shim_wait_synch":
       case "shim_update_positionbar":
@@ -401,10 +433,66 @@ export class NetHackUI {
     }
   };
 
-  private log(line: string): void {
+  // Message log state: history for save/restore, the new-message highlight
+  // boundary, and a DOM cap so a long game doesn't accumulate tens of
+  // thousands of divs.
+  private msgHistory: string[] = [];
+  private msgTurnBoundary = false;
+  private static readonly MSG_CAP = 200;
+
+  /** Set by main.ts once the adventurer is chosen; keys history storage. */
+  playerName = "";
+
+  private historyKey(): string {
+    return `nhu.msghist.${this.playerName}`;
+  }
+
+  private saveMessageHistory(): void {
+    if (!this.playerName) return;
+    try {
+      localStorage.setItem(this.historyKey(), JSON.stringify(this.msgHistory.slice(-50)));
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /** Replay a previous session's log (dim) when resuming a save. */
+  restoreMessageHistory(): void {
+    if (!this.playerName) return;
+    try {
+      const lines = JSON.parse(localStorage.getItem(this.historyKey()) ?? "[]") as string[];
+      for (const line of lines) this.log(line, true);
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /** Drop stored history (fresh adventurer under a reused name). */
+  clearMessageHistory(): void {
+    if (!this.playerName) return;
+    try {
+      localStorage.removeItem(this.historyKey());
+    } catch {
+      /* best effort */
+    }
+  }
+
+  private log(line: string, dim = false): void {
+    if (this.msgTurnBoundary) {
+      this.msgTurnBoundary = false;
+      for (const el of this.dom.messages.querySelectorAll(".msg-new")) el.classList.remove("msg-new");
+    }
     const el = document.createElement("div");
     el.textContent = line;
+    if (!dim) {
+      el.className = "msg-new";
+      this.msgHistory.push(line);
+      if (this.msgHistory.length > NetHackUI.MSG_CAP) this.msgHistory.shift();
+    }
     this.dom.messages.appendChild(el);
+    while (this.dom.messages.childElementCount > NetHackUI.MSG_CAP) {
+      this.dom.messages.firstElementChild?.remove();
+    }
     this.dom.messages.scrollTop = this.dom.messages.scrollHeight;
   }
 
