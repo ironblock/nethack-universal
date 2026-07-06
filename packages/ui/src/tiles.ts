@@ -22,6 +22,10 @@ interface TileMeta {
 export const MIN_RENDER_SIZE = 16;
 export const MAX_RENDER_SIZE = 64;
 
+/** Map-cell marker overlays (ported from Qt's pet_mark_xpm/pile_mark_xpm). */
+export type CellMark = "pet" | "pile" | undefined;
+const MARK_CODE: Record<Exclude<CellMark, undefined>, number> = { pet: 1, pile: 2 };
+
 export class TileRenderer {
   private meta!: TileMeta;
   private glyph2tile!: number[];
@@ -29,26 +33,34 @@ export class TileRenderer {
   private ctx!: CanvasRenderingContext2D;
   private canvas!: HTMLCanvasElement;
   private tile = 16;
+  private petMark!: HTMLImageElement;
+  private pileMark!: HTMLImageElement;
 
-  // Last-drawn glyph per map cell (-1 = never drawn), so changing tile size can
-  // redraw locally instead of asking the core to repaint (no redraw command
-  // needed — matches Qt/tty's "adjustable tile size" without core involvement).
+  // Last-drawn glyph/mark per map cell (-1 glyph = never drawn), so changing
+  // tile size can redraw locally instead of asking the core to repaint (no
+  // redraw command needed — matches Qt/tty's "adjustable tile size" without
+  // core involvement).
   private cells = new Int32Array(COLNO * ROWNO).fill(-1);
+  private cellMarks = new Uint8Array(COLNO * ROWNO); // 0=none, see MARK_CODE
   private lastCenter = { x: 0, y: 0 };
 
   /** Pixel size of one rendered tile (backing store). 2× source for readability. */
   renderSize = 32;
 
   async load(base = "/tiles"): Promise<void> {
-    const [meta, glyph2tile, sheet] = await Promise.all([
+    const [meta, glyph2tile, sheet, petMark, pileMark] = await Promise.all([
       fetch(`${base}/meta.json`).then((r) => r.json() as Promise<TileMeta>),
       fetch(`${base}/glyph2tile.json`).then((r) => r.json() as Promise<number[]>),
       loadImage(`${base}/tiles.png`),
+      loadImage("/map-marks/pet.png"),
+      loadImage("/map-marks/pile.png"),
     ]);
     this.meta = meta;
     this.glyph2tile = glyph2tile;
     this.sheet = sheet;
     this.tile = meta.tileSize;
+    this.petMark = petMark;
+    this.pileMark = pileMark;
   }
 
   attach(canvas: HTMLCanvasElement): void {
@@ -102,11 +114,16 @@ export class TileRenderer {
     this.ctx.fillRect(0, 0, COLNO * this.renderSize, ROWNO * this.renderSize);
   }
 
-  /** Draw the tile for `glyph` at map cell (x, y). */
-  drawGlyph(x: number, y: number, glyph: number): void {
+  /** Draw the tile for `glyph` at map cell (x, y), with an optional pet/pile marker overlay. */
+  drawGlyph(x: number, y: number, glyph: number, mark?: CellMark): void {
     if (x < 0 || x >= COLNO || y < 0 || y >= ROWNO) return;
-    this.cells[y * COLNO + x] = glyph;
-    this.blit(this.ctx, glyph, x * this.renderSize, y * this.renderSize, this.renderSize);
+    const idx = y * COLNO + x;
+    this.cells[idx] = glyph;
+    this.cellMarks[idx] = mark ? MARK_CODE[mark] : 0;
+    const dx = x * this.renderSize;
+    const dy = y * this.renderSize;
+    this.blit(this.ctx, glyph, dx, dy, this.renderSize);
+    this.drawMark(dx, dy, this.renderSize, mark);
   }
 
   /** Change the on-screen tile size and redraw from the local glyph cache (no core involvement). */
@@ -117,11 +134,25 @@ export class TileRenderer {
     this.clear();
     for (let y = 0; y < ROWNO; y++) {
       for (let x = 0; x < COLNO; x++) {
-        const glyph = this.cells[y * COLNO + x] ?? -1;
-        if (glyph >= 0) this.blit(this.ctx, glyph, x * this.renderSize, y * this.renderSize, this.renderSize);
+        const idx = y * COLNO + x;
+        const glyph = this.cells[idx] ?? -1;
+        if (glyph < 0) continue;
+        const dx = x * this.renderSize;
+        const dy = y * this.renderSize;
+        this.blit(this.ctx, glyph, dx, dy, this.renderSize);
+        const markCode = this.cellMarks[idx] ?? 0;
+        this.drawMark(dx, dy, this.renderSize, markCode === 1 ? "pet" : markCode === 2 ? "pile" : undefined);
       }
     }
     this.centerOn(this.lastCenter.x, this.lastCenter.y);
+  }
+
+  /** Top-right badge overlay for pets (heart) / object piles (cross) — ported from Qt. */
+  private drawMark(dx: number, dy: number, size: number, mark: CellMark): void {
+    if (!mark) return;
+    const img = mark === "pet" ? this.petMark : this.pileMark;
+    const badge = Math.max(6, Math.round(size * 0.4));
+    this.ctx.drawImage(img, dx + size - badge, dy, badge, badge);
   }
 
   /** Blit the tile for `glyph` into any 2d context at (dx, dy), scaled to `size`. */

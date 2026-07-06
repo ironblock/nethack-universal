@@ -41,3 +41,7 @@ packages/ui/public/extcmds.json
 # Generated status-icon spritesheet (produced by gen-status-icons.mjs, ported
 # from the Qt port's XPMs)
 packages/ui/public/status-icons/
+
+# Generated map-cell marker icons (produced by gen-map-marks.mjs, ported from
+# the Qt port's pet_mark_xpm/pile_mark_xpm in qt_map.cpp)
+packages/ui/public/map-marks/

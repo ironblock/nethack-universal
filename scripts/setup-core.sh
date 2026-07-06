@@ -47,4 +47,7 @@ bash "$ROOT/packages/core-wasm/gen-extcmds.sh"
 echo ">> Generating status icons (ported from the Qt port's XPMs)"
 node "$ROOT/packages/core-wasm/tools/gen-status-icons.mjs"
 
+echo ">> Generating map-cell marker icons (pet/pile, ported from qt_map.cpp)"
+node "$ROOT/packages/core-wasm/tools/gen-map-marks.mjs"
+
 echo ">> Core prep complete. Now run: npm run build:core"

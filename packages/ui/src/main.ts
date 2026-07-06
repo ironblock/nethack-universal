@@ -79,8 +79,11 @@ async function boot(): Promise<void> {
         // selection (Phase 2). !legacy skips the intro poem's --More--.
         // Real character selection now works via the menu system (Phase 2), so
         // we no longer pre-specify role/race/gender/align. !tutorial keeps the
-        // tutorial prompt off; time/showexp drive the status line.
-        m.ENV.NETHACKOPTIONS = "!tutorial,!legacy,time,showexp";
+        // tutorial prompt off; time/showexp drive the status line. hilite_pet/
+        // hilite_pile are Off by default upstream (NHOPTB Off) — Qt players
+        // typically turn them on; we do it for them, matching tiles.ts's
+        // pet/pile marker overlays.
+        m.ENV.NETHACKOPTIONS = "!tutorial,!legacy,time,showexp,hilite_pet,hilite_pile";
       },
     ],
   };

@@ -27,8 +27,13 @@ const NHW = { MESSAGE: 1, STATUS: 2, MAP: 3, MENU: 4, TEXT: 5, PERMINVENT: 6 } a
 // an ordinary NHW_MENU (never actually typed NHW_PERMINVENT in practice).
 const MENU_BEHAVE_PERMINV = 0x1;
 
-// glyph_info layout (include/wintype.h): int glyph @0; int ttychar @4; ...
+// glyph_info layout (include/wintype.h): int glyph@0; int ttychar@4;
+// uint32 framecolor@8; glyph_map gm@12 (gm.glyphflags is gm's first field).
 const GLYPHINFO_GLYPH_OFFSET = 0;
+const GLYPHINFO_FLAGS_OFFSET = 12;
+// include/display.h
+const MG_PET = 0x00010;
+const MG_OBJPILE = 0x00080;
 
 interface Dom {
   messages: HTMLElement;
@@ -125,7 +130,9 @@ export class NetHackUI {
           this.renderer.drawGlyph(x, y, this.mod.getValue(bkglyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32"));
         }
         if (glyphinfo) {
-          this.renderer.drawGlyph(x, y, this.mod.getValue(glyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32"));
+          const flags = this.mod.getValue(glyphinfo + GLYPHINFO_FLAGS_OFFSET, "i32");
+          const mark = flags & MG_PET ? "pet" : flags & MG_OBJPILE ? "pile" : undefined;
+          this.renderer.drawGlyph(x, y, this.mod.getValue(glyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32"), mark);
         }
         return;
       }
