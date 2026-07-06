@@ -38,7 +38,22 @@
       }
       #tilesize button:hover { background: #35406a; }
       #tilesize button:disabled { opacity: 0.4; cursor: default; }
-      #status { padding: 4px 10px; background: #161616; color: #cc9; min-height: 1em; }
+      #fontsize { display: flex; align-items: center; gap: 4px; color: #789; }
+      #fontsize button {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        color: #cdc;
+        border-radius: 3px;
+        width: 22px;
+        height: 22px;
+        font: inherit;
+        cursor: pointer;
+      }
+      #fontsize button:hover { background: #35406a; }
+      #fontsize button:disabled { opacity: 0.4; cursor: default; }
+      #fontsize-label { min-width: 5em; text-align: center; }
+      :root { --hud-font-size: 14px; }
+      #status { padding: 4px 10px; background: #161616; color: #cc9; min-height: 1em; font-size: var(--hud-font-size); }
       .status-line {
         display: flex;
         flex-wrap: wrap;
@@ -85,7 +100,7 @@
         padding: 6px 10px;
         background: #0c0c0c;
         border-top: 1px solid #333;
-        font-size: 13px;
+        font-size: var(--hud-font-size);
         color: #bcb;
       }
       #messages div { margin: 1px 0; }
@@ -172,15 +187,59 @@
         line-height: 1.3;
         overflow-y: auto;
       }
+
+      /* Splash screen (Qt shows a title/version splash at startup and character select) */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: radial-gradient(ellipse at center, #1c2620 0%, #0a0d0a 100%);
+        color: #cfe8cf;
+        text-align: center;
+        transition: opacity 0.3s ease-out;
+      }
+      #splash.hidden { opacity: 0; pointer-events: none; }
+      #splash h1 {
+        font-size: 2.6em;
+        margin: 0;
+        letter-spacing: 0.04em;
+        color: #e9c46a;
+        text-shadow: 0 0 18px rgba(233, 196, 106, 0.35);
+      }
+      #splash .tag { color: #8ab68a; font-size: 1.1em; }
+      #splash .version { color: #678; font-size: 0.85em; margin-top: 18px; }
+      #splash .hint {
+        margin-top: 28px;
+        color: #567;
+        font-size: 0.85em;
+        animation: splash-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes splash-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
     </style>
   </head>
   <body>
     <header>
       <span>nethack-universal — arrows move · letters = commands · i = inventory · S = save</span>
-      <span id="tilesize">
-        Tile size
-        <button id="tilesize-dec" type="button" aria-label="Smaller tiles">−</button>
-        <button id="tilesize-inc" type="button" aria-label="Larger tiles">+</button>
+      <span style="display: flex; gap: 16px">
+        <span id="fontsize">
+          Font
+          <button id="fontsize-dec" type="button" aria-label="Smaller font">−</button>
+          <span id="fontsize-label">Medium</span>
+          <button id="fontsize-inc" type="button" aria-label="Larger font">+</button>
+        </span>
+        <span id="tilesize">
+          Tile size
+          <button id="tilesize-dec" type="button" aria-label="Smaller tiles">−</button>
+          <button id="tilesize-inc" type="button" aria-label="Larger tiles">+</button>
+        </span>
       </span>
     </header>
     <div id="status"></div>
@@ -190,6 +249,12 @@
     </div>
     <div id="messages"></div>
     <div id="overlay"></div>
+    <div id="splash">
+      <h1>NetHack</h1>
+      <div class="tag">universal</div>
+      <div class="version">NetHack 5.0.0 · browser port</div>
+      <div class="hint">press any key or click to begin</div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

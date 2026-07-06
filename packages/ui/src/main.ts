@@ -21,10 +21,20 @@ import { StatusIcons } from "./statusicons";
 import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
 
 const TILE_SIZE_STEP = 8;
+// Qt's Settings dialog offers Tiny/Small/Medium/Large/Huge for message+status text.
+const FONT_SIZES: Array<[label: string, px: number]> = [
+  ["Tiny", 10],
+  ["Small", 12],
+  ["Medium", 14],
+  ["Large", 16],
+  ["Huge", 20],
+];
 
 const CALLBACK_NAME = "nethackCallback";
 
 async function boot(): Promise<void> {
+  wireSplashScreen();
+
   const dom = {
     messages: byId("messages"),
     status: byId("status"),
@@ -34,6 +44,7 @@ async function boot(): Promise<void> {
   await renderer.load();
   renderer.attach(byId("map") as HTMLCanvasElement);
   wireTileSizeControls(renderer);
+  wireFontSizeControls();
 
   const menuCtl = new MenuController(byId("overlay"), renderer);
   const promptCtl = new PromptController(byId("overlay"));
@@ -136,6 +147,47 @@ function wireTileSizeControls(renderer: TileRenderer): void {
     sync();
   });
   sync();
+}
+
+/** Message/status text size (Qt's Settings dialog font-size dropdown). */
+function wireFontSizeControls(): void {
+  const dec = byId("fontsize-dec") as HTMLButtonElement;
+  const inc = byId("fontsize-inc") as HTMLButtonElement;
+  const label = byId("fontsize-label");
+  let idx = FONT_SIZES.findIndex(([, px]) => `${px}px` === getComputedStyle(document.documentElement).getPropertyValue("--hud-font-size").trim());
+  if (idx < 0) idx = 2; // Medium
+
+  const apply = () => {
+    const entry = FONT_SIZES[idx];
+    if (!entry) return;
+    const [name, px] = entry;
+    document.documentElement.style.setProperty("--hud-font-size", `${px}px`);
+    label.textContent = name;
+    dec.disabled = idx <= 0;
+    inc.disabled = idx >= FONT_SIZES.length - 1;
+  };
+  dec.addEventListener("click", () => {
+    idx = Math.max(0, idx - 1);
+    apply();
+  });
+  inc.addEventListener("click", () => {
+    idx = Math.min(FONT_SIZES.length - 1, idx + 1);
+    apply();
+  });
+  apply();
+}
+
+/** Qt shows a version/attribution splash at startup and character select. */
+function wireSplashScreen(): void {
+  const splash = byId("splash");
+  const dismiss = () => {
+    splash.classList.add("hidden");
+    window.removeEventListener("keydown", dismiss, true);
+    window.removeEventListener("click", dismiss, true);
+    setTimeout(() => splash.remove(), 350);
+  };
+  window.addEventListener("keydown", dismiss, true);
+  window.addEventListener("click", dismiss, true);
 }
 
 boot().catch((err) => {
