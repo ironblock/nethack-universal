@@ -14,6 +14,7 @@ import type { NetHackModule } from "./emscripten";
 import { InputQueue } from "./input";
 import type { TileRenderer } from "./tiles";
 import type { MenuController, MenuItem, PermInventPanel } from "./menu";
+import type { PaperdollPanel } from "./paperdoll";
 import type { PromptController } from "./prompt";
 import type { Storage } from "./persistence";
 import type { TextWindowController } from "./textwindow";
@@ -50,6 +51,7 @@ export class NetHackUI {
   private renderer!: TileRenderer;
   private menuCtl!: MenuController;
   private permInvent!: PermInventPanel;
+  private paperdoll!: PaperdollPanel;
   private promptCtl!: PromptController;
   private storage!: Storage;
   private textWinCtl!: TextWindowController;
@@ -76,6 +78,7 @@ export class NetHackUI {
     extCmdCtl: ExtCmdController,
     statusIcons: StatusIcons,
     tombstoneCtl: TombstoneController,
+    paperdoll: PaperdollPanel,
   ): void {
     this.mod = mod;
     this.dom = dom;
@@ -85,6 +88,7 @@ export class NetHackUI {
     this.storage = storage;
     this.textWinCtl = textWinCtl;
     this.permInvent = permInvent;
+    this.paperdoll = paperdoll;
     this.extCmdCtl = extCmdCtl;
     this.tombstoneCtl = tombstoneCtl;
     this.status = new StatusBar(dom.status, statusIcons);
@@ -264,6 +268,7 @@ export class NetHackUI {
         // inventory change with want_reply=FALSE and expects no selection back.
         if (menu.permInvent) {
           this.permInvent.render(menu.items);
+          this.paperdoll.render(menu.items);
           if (menuListPtr) this.mod.setValue(menuListPtr, 0, "i32");
           return 0;
         }
