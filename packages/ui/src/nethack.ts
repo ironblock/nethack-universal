@@ -18,6 +18,7 @@ import type { PromptController } from "./prompt";
 import type { Storage } from "./persistence";
 import type { TextWindowController } from "./textwindow";
 import type { ExtCmdController } from "./extcmd";
+import type { StatusIcons } from "./statusicons";
 import { StatusBar, BL_FLUSH, BL_RESET, BL_CONDITION } from "./status";
 
 // include/wintype.h
@@ -65,6 +66,7 @@ export class NetHackUI {
     textWinCtl: TextWindowController,
     permInvent: PermInventPanel,
     extCmdCtl: ExtCmdController,
+    statusIcons: StatusIcons,
   ): void {
     this.mod = mod;
     this.dom = dom;
@@ -75,7 +77,7 @@ export class NetHackUI {
     this.textWinCtl = textWinCtl;
     this.permInvent = permInvent;
     this.extCmdCtl = extCmdCtl;
-    this.status = new StatusBar(dom.status);
+    this.status = new StatusBar(dom.status, statusIcons);
   }
 
   /** Set true to trace every window-proc call to the console (capped). */

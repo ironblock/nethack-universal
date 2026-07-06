@@ -37,3 +37,7 @@ packages/ui/public/tiles/
 
 # Generated extended-command list (produced by gen-extcmds.sh)
 packages/ui/public/extcmds.json
+
+# Generated status-icon spritesheet (produced by gen-status-icons.mjs, ported
+# from the Qt port's XPMs)
+packages/ui/public/status-icons/

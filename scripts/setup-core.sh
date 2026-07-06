@@ -44,4 +44,7 @@ bash "$ROOT/packages/core-wasm/gen-tiles.sh"
 echo ">> Generating extended-command list"
 bash "$ROOT/packages/core-wasm/gen-extcmds.sh"
 
+echo ">> Generating status icons (ported from the Qt port's XPMs)"
+node "$ROOT/packages/core-wasm/tools/gen-status-icons.mjs"
+
 echo ">> Core prep complete. Now run: npm run build:core"

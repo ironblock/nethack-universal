@@ -16,7 +16,19 @@
         height: 100vh;
       }
       header { padding: 6px 10px; background: #1b1b1b; font-size: 13px; color: #9a9; }
-      #status { padding: 4px 10px; background: #161616; color: #cc9; white-space: pre; min-height: 1em; }
+      #status { padding: 4px 10px; background: #161616; color: #cc9; min-height: 1em; }
+      .status-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        white-space: pre;
+      }
+      .status-chip {
+        display: inline-flex;
+        align-items: center;
+        white-space: pre;
+      }
+      .status-icon { image-rendering: pixelated; vertical-align: middle; margin-right: 1px; }
       #main { flex: 1; display: flex; min-height: 0; }
       #mapwrap {
         flex: 1;

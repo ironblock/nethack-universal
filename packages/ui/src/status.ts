@@ -6,7 +6,11 @@
  * Note: the shim wires status_enablefield to the *generic* handler (no JS
  * callback), so we can't learn field formats at runtime — we hardcode them from
  * src/botl.c's INIT_BLSTAT table (indexed by BL_* from include/botl.h).
+ *
+ * Icons (attributes/alignment/hunger/encumbrance/conditions) are ported from
+ * the Qt window port's XPMs — see statusicons.ts and gen-status-icons.mjs.
  */
+import type { StatusIcons } from "./statusicons";
 
 export const BL_RESET = -2;
 export const BL_FLUSH = -1;
@@ -39,35 +43,54 @@ const FIELD_FMT: Record<number, string> = {
   22: " %s", // condition
 };
 
-// Traditional two-line layout, by BL_* field index.
-const LINE1 = [0, 1, 2, 3, 4, 5, 6, 7];
-const LINE2 = [20, 10, 18, 19, 11, 12, 14, 13, 21, 15, 16, 17, 9, 8, 22];
+// botl.c src/eat.c hu_stat[] order (indices are the raw idx passed to status_update).
+const HUNGER_ICON: Record<number, string> = { 0: "satiated", 2: "hungry", 3: "hungry", 4: "hungry", 5: "hungry", 6: "hungry" };
+// botl.c enc_stat[] text → Qt's p_encumber[0..4] icon (slt/mod/hvy/ext/ovr_enc).
+const ENCUMBER_ICON: Record<string, string> = {
+  Burdened: "slt_enc",
+  Stressed: "mod_enc",
+  Strained: "hvy_enc",
+  Overtaxed: "ext_enc",
+  Overloaded: "ovr_enc",
+};
+// Icon per attribute field index.
+const ATTR_ICON: Record<number, string> = { 1: "str", 2: "dex", 3: "cns", 4: "int", 5: "wis", 6: "cha" };
 
-// Condition bitmask (BL_MASK_*) → short display name.
-const CONDITIONS: Array<[number, string]> = [
-  [0x00000002, "Blind"],
-  [0x00000008, "Conf"],
-  [0x00000010, "Deaf"],
-  [0x00000080, "FoodPois"],
-  [0x00000040, "Fly"],
-  [0x00000400, "Hallu"],
+// Traditional two-line layout, by BL_* field index.
+const LINE1 = [0, 1, 2, 3, 4, 5, 6];
+const LINE2 = [20, 10, 18, 19, 11, 12, 14, 13, 21, 15, 16, 8];
+
+// Condition bitmask (BL_MASK_*) → [short display name, icon name or undefined].
+const CONDITIONS: Array<[number, string, string?]> = [
+  [0x00000002, "Blind", "blind"],
+  [0x00000008, "Conf", "confused"],
+  [0x00000010, "Deaf", "deaf"],
+  [0x00000080, "FoodPois", "sick_fp"],
+  [0x00000040, "Fly", "fly"],
+  [0x00000400, "Hallu", "hallu"],
   [0x00000800, "Held"],
-  [0x00004000, "Lev"],
-  [0x00010000, "Ride"],
+  [0x00004000, "Lev", "lev"],
+  [0x00010000, "Ride", "ride"],
   [0x00020000, "Zzz"],
-  [0x00040000, "Slime"],
-  [0x00100000, "Stone"],
-  [0x00200000, "Strngl"],
-  [0x00400000, "Stun"],
-  [0x01000000, "TermIll"],
+  [0x00040000, "Slime", "slime"],
+  [0x00100000, "Stone", "stone"],
+  [0x00200000, "Strngl", "strngl"],
+  [0x00400000, "Stun", "stunned"],
+  [0x01000000, "TermIll", "sick_il"],
   [0x04000000, "Trapped"],
   [0x08000000, "Unconsc"],
 ];
 
+const ALIGN_ICON: Record<string, string> = { lawful: "lawful", neutral: "neutral", chaotic: "chaotic" };
+
 export class StatusBar {
   private vals = new Map<number, string>();
+  private conditionMask = 0;
 
-  constructor(private el: HTMLElement) {}
+  constructor(
+    private el: HTMLElement,
+    private icons: StatusIcons,
+  ) {}
 
   update(idx: number, val: string): void {
     // NetHack embeds glyphs in mixed text as "\G%04X%04X" (rndencode + glyph).
@@ -77,23 +100,79 @@ export class StatusBar {
   }
 
   setCondition(mask: number): void {
-    const names = CONDITIONS.filter(([bit]) => mask & bit).map(([, n]) => n);
-    if (names.length) this.vals.set(BL_CONDITION, names.join(" "));
-    else this.vals.delete(BL_CONDITION);
+    this.conditionMask = mask;
   }
 
   render(): void {
-    const l1 = this.line(LINE1);
-    const l2 = this.line(LINE2);
-    this.el.textContent = `${l1}\n${l2}`;
+    const frag = document.createDocumentFragment();
+    frag.appendChild(this.line(LINE1, true));
+    frag.appendChild(this.line(LINE2, false));
+    this.el.replaceChildren(frag);
   }
 
-  private line(indices: number[]): string {
-    let out = "";
+  private line(indices: number[], withAlignAndConditions: boolean): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "status-line";
     for (const idx of indices) {
       const val = this.vals.get(idx);
-      if (val) out += (FIELD_FMT[idx] ?? "%s").replace("%s", val);
+      if (!val) continue;
+      const icon = ATTR_ICON[idx];
+      if (icon) row.appendChild(this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val)));
+      else row.appendChild(this.text((FIELD_FMT[idx] ?? "%s").replace("%s", val)));
     }
-    return out.trim();
+    if (withAlignAndConditions) this.appendAlignment(row);
+    else this.appendHungerEncumberConditions(row);
+    return row;
+  }
+
+  private appendAlignment(row: HTMLElement): void {
+    const align = this.vals.get(7);
+    if (!align) return;
+    const iconName = ALIGN_ICON[align.trim().toLowerCase()];
+    row.appendChild(
+      iconName ? this.iconChip(iconName, ` ${align}`) : this.text(` ${align}`),
+    );
+  }
+
+  private appendHungerEncumberConditions(row: HTMLElement): void {
+    const hungerIdx = this.hungerStateIndex();
+    const hunger = this.vals.get(17)?.trim();
+    if (hunger && hungerIdx !== undefined) {
+      const icon = HUNGER_ICON[hungerIdx];
+      row.appendChild(icon ? this.iconChip(icon, ` ${hunger}`) : this.text(` ${hunger}`));
+    }
+
+    const encumber = this.vals.get(9)?.trim();
+    if (encumber) {
+      const icon = ENCUMBER_ICON[encumber];
+      row.appendChild(icon ? this.iconChip(icon, ` ${encumber}`) : this.text(` ${encumber}`));
+    }
+
+    for (const [bit, name, icon] of CONDITIONS) {
+      if (!(this.conditionMask & bit)) continue;
+      row.appendChild(icon ? this.iconChip(icon, ` ${name}`) : this.text(` ${name}`));
+    }
+  }
+
+  /** hu_stat[]/hutxt[] index for the current hunger text, for icon lookup. */
+  private hungerStateIndex(): number | undefined {
+    const val = this.vals.get(17)?.trim();
+    if (!val) return undefined;
+    const order = ["Satiated", "", "Hungry", "Weak", "Fainting", "Fainted", "Starved"];
+    const idx = order.indexOf(val);
+    return idx >= 0 ? idx : undefined;
+  }
+
+  private iconChip(name: string, label: string): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "status-chip";
+    const icon = this.icons.render(name, 16);
+    if (icon) span.appendChild(icon);
+    span.appendChild(document.createTextNode(label));
+    return span;
+  }
+
+  private text(s: string): Text {
+    return document.createTextNode(s);
   }
 }

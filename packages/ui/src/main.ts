@@ -17,6 +17,7 @@ import { PromptController } from "./prompt";
 import { IdbfsStorage } from "./persistence";
 import { TextWindowController } from "./textwindow";
 import { ExtCmdController } from "./extcmd";
+import { StatusIcons } from "./statusicons";
 
 const CALLBACK_NAME = "nethackCallback";
 
@@ -36,6 +37,8 @@ async function boot(): Promise<void> {
   const permInvent = new PermInventPanel(byId("perminvent"), renderer);
   const extCmdCtl = new ExtCmdController(byId("overlay"));
   await extCmdCtl.load();
+  const statusIcons = new StatusIcons();
+  await statusIcons.load();
 
   const ui = new NetHackUI();
   // The shim looks up the callback by name on globalThis.
@@ -87,7 +90,7 @@ async function boot(): Promise<void> {
   await storage.load();
   window.addEventListener("pagehide", () => void storage.save());
 
-  ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl);
+  ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl, statusIcons);
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
 
