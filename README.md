@@ -63,10 +63,16 @@ npm run dev -w @nethack-universal/ui              # http://localhost:5173
   `#terrain`, `#conduct`, `#version`, and dozens more. The command list itself
   is generated at build time from `src/cmd.c`'s `extcmdlist[]`
   (`packages/core-wasm/gen-extcmds.sh`), not hand-maintained.
+- **Status HUD icons** for the six attributes, alignment, hunger, encumbrance,
+  and status conditions, ported from the Qt port's XPM assets
+  (`win/Qt/qt_xpms.h`, same license) at build time
+  (`packages/core-wasm/tools/gen-status-icons.mjs`) — plus a color-coded HP bar.
+- **Adjustable tile size** (+/− controls in the header), redrawn instantly from
+  a client-side glyph cache — no core round-trip needed.
 
-Remaining for full Qt parity: adjustable tile size, runtime tileset switching,
-and matching Qt's attribute/alignment/condition icon set (Qt ships these as
-XPMs in `win/Qt/qt_xpms.h` — same license, straightforward to port).
+Remaining for full Qt parity (both low-priority / explicitly optional per the
+original brief): runtime tileset switching, and long-menu "paging" (already
+effectively handled via scroll).
 
 Next: Tauri desktop shell (Phase 4) — `packages/ui/src/persistence.ts`'s
 `Storage` interface is already abstracted for a real-filesystem swap.
