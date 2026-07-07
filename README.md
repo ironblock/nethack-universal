@@ -48,36 +48,49 @@ npm run dev -w @nethack-universal/ui              # http://localhost:5173
 
 ## Status
 
-**Phases 0–3 complete**, plus most of the Qt-parity pass:
+**Phases 0–3 complete**, plus a comprehensive Qt-parity pass (driven by a
+full audit of `win/Qt/*`):
 
 - Core compiles to WASM, boots in the browser, renders **graphical tiles** (the
   shipped 5.0 tileset) to canvas, and drives blocking input via Asyncify.
-- Clickable menus (inventory, selection, category headers, paging), a docked
-  always-visible `perm_invent` panel, mouse click-to-travel/look, interactive
-  y/n and text prompts, and a two-line status HUD.
-- Full save/resume via IndexedDB (IDBFS).
-- **`#` extended-command entry** with typed-prefix autocomplete (mirrors the Qt
-  port's behavior — unambiguous prefixes select immediately) — this unlocks
-  everything else routed through NetHack's generic menu system for free,
-  including the in-game **options editor** (`#optionsfull`), `#overview`,
-  `#terrain`, `#conduct`, `#version`, and dozens more. The command list itself
-  is generated at build time from `src/cmd.c`'s `extcmdlist[]`
-  (`packages/core-wasm/gen-extcmds.sh`), not hand-maintained.
-- **Status HUD icons** for the six attributes, alignment, hunger, encumbrance,
-  and status conditions, ported from the Qt port's XPM assets
-  (`win/Qt/qt_xpms.h`, same license) at build time
-  (`packages/core-wasm/tools/gen-status-icons.mjs`) — plus a color-coded HP bar.
-- **Adjustable tile size** (+/− controls in the header), redrawn instantly from
-  a client-side glyph cache — no core round-trip needed.
-- Font-size control, a startup splash, a statuslines compact/spread toggle, a
-  graphical tombstone (ported from `win/X11/rip.xpm`), a paper-doll equipment
-  view, pet/pile map markers, and a multi-save-slot picker — see the source
-  comments in `packages/ui/src/` for how each one works.
+- **Graphical character picker** (qt_plsel.cpp): role/race cards with
+  gender-correct monster-tile portraits, validity cross-filtering with
+  auto-correction, Random — data generated at build time from `role.c` /
+  `monsters.h` (`gen-roles.mjs`), the choice fed to the core via a generated
+  `~/.nethackrc` so `genl_player_setup` never prompts.
+- **Qt-classic layout**: messages | paperdoll | status across the top, full-
+  width map below, with draggable splitters and a collapsible inventory panel
+  (all persisted), under one dark design-token theme.
+- **Menus with Qt's full interaction model** (qt_menu.cpp): Ok/Cancel/All/
+  None/Invert/Search buttons with per-mode enabling, typed-digit counts for
+  partial stacks (round-tripped through `menu_item.count`), group
+  accelerators, the core's menu command keys, preselection, per-item
+  menucolors/attributes, tab-column alignment — plus per-item tile icons.
+- **Menubar and toolbar** (qt_main.cpp): Game/Gear/Action/Magic/Info/Help
+  menus and the nine icon buttons (XPMs ported by `gen-toolbar-icons.mjs`),
+  dispatching extended commands, gated on the core waiting at the prompt.
+- **Status panel** as Qt's icon grid (name plate, HP/Pw bars, six attribute
+  cards, condition chips) with green/red/blue change-flash highlighting and a
+  dense-strip alternative; HP-colored **map cursor** rectangle; blocking
+  **--More--** acknowledgment.
+- **Settings dialog** (qt_set.cpp) with write-through localStorage
+  persistence: tile/text size, status layout, paperdoll visibility,
+  hilite_pet/hilite_pile.
+- Full save/resume via IndexedDB (IDBFS) with **idle checkpoint flushing**,
+  a multi-save-slot picker, and message-log continuity across save/resume.
+- **`#` extended-command entry** with typed-prefix autocomplete; the command
+  list is generated from `src/cmd.c`'s `extcmdlist[]` with the same defines
+  as the WASM core (a host/emcc mismatch here once shifted every command
+  index by one — see `gen-extcmds.sh`).
+- Status HUD icons from the Qt XPMs, adjustable tile size, startup splash,
+  graphical tombstone (`win/X11/rip.xpm`), paper-doll equipment view with
+  BUC-tinted borders and click-to-`#seeall`, pet/pile map markers, message
+  new/old highlighting, text-window Dismiss/Search, `delay_output` pacing,
+  Alt+letter meta commands, F1/F2/Tab macros.
 
-Remaining for full Qt parity (both low-priority / explicitly optional per the
-original brief): runtime tileset switching, long-menu "paging" (already
-effectively handled via scroll), character-creation portraits, and a
-menu-bar/toolbar (intentional keyboard-first tradeoff).
+Known gaps (deliberate): ASCII map mode, in-browser help files (`display_file`
+reads the core's dlb archive, unreachable from JS), runtime tileset switching,
+compact/handheld layout, `yn` count side-channel, and sound.
 
 Next: Tauri desktop shell (Phase 4) — `packages/ui/src/persistence.ts`'s
 `Storage` interface is already abstracted for a real-filesystem swap.
@@ -92,9 +105,8 @@ prefixed with `base.ts`'s `BASE_URL` (Vite's `import.meta.env.BASE_URL`, set
 via `--base=/<repo-name>/` at build time) for exactly that reason. To enable:
 in the repo's Settings → Pages, set Source to "GitHub Actions".
 
-The workflow's Linux build path (`hints/linux.500`) has not been verified
-against a real CI run as of this writing — only `hints/macOS.500` has
-actually been built and played locally. If the workflow fails, start there.
+Both the Linux CI build path (`hints/linux.500`) and the deploy pipeline have
+been verified by real runs — the site deploys on every push to `main`.
 
 ## Licensing
 
