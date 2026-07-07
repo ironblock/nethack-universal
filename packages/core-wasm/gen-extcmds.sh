@@ -16,12 +16,16 @@ OUT="$ROOT/packages/core-wasm/artifacts/cmd.i"
 mkdir -p "$(dirname "$OUT")"
 
 echo ">> Preprocessing src/cmd.c with the WASM build's defines"
+# -DNOCRASHREPORT: config.h auto-defines CRASHREPORT when the HOST compiler
+# implies MACOS/__linux__, inserting a "bugreport" extcmdlist entry that
+# emcc's build (neither macro) doesn't have — which shifted every command
+# index after it by one, making get_ext_cmd dispatch the wrong command.
 ( cd "$NH" && cc \
     -DGNU_LIBC -DSYSCF -DSYSCF_FILE=\"/sysconf\" -DSECURE \
     -I include -I sys/unix -DNOTPARMDECL -DDLB -DCHDIR \
     -DVAR_PLAYGROUND=\"/nethack-data\" -DHACKDIR=\"/\" \
     -DDEFAULT_WINDOW_SYS=\"shim\" -DNOMAIL -Ilib/lua-5.4.8/src/src \
-    -DNOTTYGRAPHICS -DSHIM_GRAPHICS -DLIBNH -DCROSSCOMPILE \
+    -DNOTTYGRAPHICS -DSHIM_GRAPHICS -DLIBNH -DCROSSCOMPILE -DNOCRASHREPORT \
     -E src/cmd.c -o "$OUT" )
 
 echo ">> Parsing extcmdlist[] -> packages/ui/public/extcmds.json"

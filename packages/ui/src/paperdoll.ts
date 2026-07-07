@@ -67,9 +67,10 @@ const LAYOUT: Array<{ slot: SlotKey | null; label: string }[]> = [
 ];
 
 const ARMOR_KEYWORDS: Array<[RegExp, SlotKey]> = [
+  [/blindfold|towel|lenses/i, "blindfold"], // eyewear, before the suit fallback
   [/shield/i, "shield"],
   [/gloves|gauntlets|mitten/i, "gloves"],
-  [/\bhelm\b|helmet|\bcap\b|crown|mask/i, "helmet"],
+  [/\bhelm\b|helmet|\bcap\b|crown|mask|fedora|\bhat\b|cornuthaum|dunce/i, "helmet"],
   [/cloak|robe|mummy wrapping|leather jacket|apron/i, "cloak"],
   [/shirt/i, "shirt"],
   [/boots|shoes/i, "boots"],
@@ -94,11 +95,30 @@ function classify(text: string): SlotKey | null {
   return null;
 }
 
+/** doname() spells out known BUC state; tint the slot border like Qt does. */
+function bucClass(text: string): string | null {
+  const t = text.toLowerCase();
+  if (t.includes("blessed")) return "buc-blessed";
+  if (t.includes("cursed") && !t.includes("uncursed")) return "buc-cursed";
+  if (t.includes("uncursed")) return "buc-uncursed";
+  return null;
+}
+
+/** "(weapon in hands)" = two-handed grip: the weapon occupies the shield slot too. */
+function isTwoHanded(text: string): boolean {
+  return /\(weapon in hands\)/i.test(text);
+}
+
 export class PaperdollPanel {
+  /** Optional: invoked when the doll is clicked (main.ts wires #seeall, like Qt). */
+  onClick: (() => void) | null = null;
+
   constructor(
     private container: HTMLElement,
     private renderer: TileRenderer,
-  ) {}
+  ) {
+    container.addEventListener("click", () => this.onClick?.());
+  }
 
   render(items: MenuItem[]): void {
     const bySlot = new Map<SlotKey, MenuItem>();
@@ -108,6 +128,11 @@ export class PaperdollPanel {
       // Amulet class items reach classify() via "being worn" already; guard
       // against an alt-weapon/weapon collision by first match wins per slot.
       if (slot && !bySlot.has(slot)) bySlot.set(slot, item);
+      // A two-handed weapon fills both hands — mirror it into the shield
+      // slot (qt_inv.cpp shows the same object twice).
+      if (slot === "weapon" && isTwoHanded(item.text) && !bySlot.has("shield")) {
+        bySlot.set("shield", item);
+      }
     }
 
     const frag = document.createDocumentFragment();
@@ -130,6 +155,8 @@ export class PaperdollPanel {
         const item = bySlot.get(cell.slot);
         if (item) {
           div.classList.add("filled");
+          const buc = bucClass(item.text);
+          if (buc) div.classList.add(buc);
           div.title = item.text;
           const canvas = document.createElement("canvas");
           canvas.width = 28;

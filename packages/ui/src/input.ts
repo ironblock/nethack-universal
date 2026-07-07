@@ -55,6 +55,11 @@ export class InputQueue {
     this.push({ kind: "key", code });
   }
 
+  /** Drop everything buffered (pre-game keystrokes must not replay in-game). */
+  clear(): void {
+    this.buffer.length = 0;
+  }
+
   /** Resolves with the next event, waiting if the queue is empty. */
   next(): Promise<NhInput> {
     const queued = this.buffer.shift();
@@ -98,6 +103,18 @@ function clearTimers(): void {
   graceTimer = repeatTimer = null;
 }
 
+/**
+ * Stop any held-arrow repeat cycle. Modal overlays call this on open: they
+ * swallow the keyup, so without it the repeat timer would keep injecting
+ * moves into the queue that all execute the moment the overlay closes.
+ * (`held` is cleared too so the ignored auto-repeat keydowns can't restart
+ * it — the player just presses the arrow again.)
+ */
+export function cancelHeldRepeat(): void {
+  held.clear();
+  clearTimers();
+}
+
 /** Wire document-level key handling into the given queue. */
 export function attachKeyboard(queue: InputQueue): void {
   const commitMove = () => queue.pushKey(arrowCommand().charCodeAt(0));
@@ -131,6 +148,26 @@ export function attachKeyboard(queue: InputQueue): void {
       return;
     }
 
+    // Qt's function-key macros (qt_main.cpp keyPressEvent): F1 rests 100
+    // turns, F2 searches 20 times, Tab repeats the previous command (^A).
+    const MACROS: Record<string, string> = { F1: "100.", F2: "20s", Tab: "\x01" };
+    const macro = MACROS[e.key];
+    if (macro) {
+      e.preventDefault();
+      for (const ch of macro) queue.pushKey(ch.charCodeAt(0));
+      return;
+    }
+
+    // PageUp/PageDown scroll the message log (Qt's global key handling).
+    if (e.key === "PageUp" || e.key === "PageDown") {
+      const log = document.getElementById("messages");
+      if (log) {
+        e.preventDefault();
+        log.scrollTop += (e.key === "PageUp" ? -0.9 : 0.9) * log.clientHeight;
+      }
+      return;
+    }
+
     // Special keys the core cares about.
     if (e.key === "Enter") return queue.pushKey(13);
     if (e.key === "Escape") return queue.pushKey(27);
@@ -139,6 +176,19 @@ export function attachKeyboard(queue: InputQueue): void {
       return queue.pushKey(32);
     }
     if (e.key === "Backspace") return queue.pushKey(8);
+
+    // Alt+letter → meta-encoded command (M-x; cmd.c strips the 0x80 bit).
+    // Derived from e.code, not e.key: macOS composes Option+letter into 'å',
+    // 'Dead', etc., so e.key never contains the plain letter there. Checked
+    // before the printable block so dead-key events are caught too.
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      const m = /^Key([A-Z])$/.exec(e.code);
+      if (m) {
+        e.preventDefault();
+        return queue.pushKey(m[1]!.toLowerCase().charCodeAt(0) | 0x80);
+      }
+      return;
+    }
 
     // Printable single characters pass straight through (letters, digits,
     // punctuation commands like '.', ',', '<', '>', '#', 'i', 'S', etc.).
@@ -151,7 +201,12 @@ export function attachKeyboard(queue: InputQueue): void {
           return queue.pushKey(c - 96);
         }
       }
-      queue.pushKey(e.key.charCodeAt(0));
+      const code = e.key.charCodeAt(0);
+      // Never queue non-ASCII (composed 'é' etc.): codes >127 aren't NetHack
+      // commands, and worse, an unconstrained yn prompt would echo one back
+      // through the shim's 'c' return marshal, which throws on values >128 —
+      // wedging Asyncify (see nethack.ts shim_yn_function).
+      if (code <= 126) queue.pushKey(code);
     }
   });
 

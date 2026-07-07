@@ -59,6 +59,11 @@ const ATTR_ICON: Record<number, string> = { 1: "str", 2: "dex", 3: "cns", 4: "in
 // Traditional two-line layout, by BL_* field index.
 const LINE1 = [0, 1, 2, 3, 4, 5, 6];
 const LINE2 = [20, 10, 18, 19, 11, 12, 14, 13, 21, 15, 16, 8];
+// Vitals row of the icon-grid layout (attributes get their own cards).
+const VITALS = [20, 10, 18, 19, 11, 12, 14, 13, 21, 15, 16, 8];
+
+const HP_COLOR = (pct: number): string =>
+  pct >= 0.5 ? "#3a9e3a" : pct >= 0.25 ? "#c9b93a" : pct >= 0.1 ? "#d67f2a" : "#c93a3a";
 
 // Condition bitmask (BL_MASK_*) → [short display name, icon name or undefined].
 const CONDITIONS: Array<[number, string, string?]> = [
@@ -83,29 +88,63 @@ const CONDITIONS: Array<[number, string, string?]> = [
 
 const ALIGN_ICON: Record<string, string> = { lawful: "lawful", neutral: "neutral", chaotic: "chaotic" };
 
-// Qt's iflags.wc2_statuslines: 2 ("compact") folds Alignment up next to Cha;
-// 3 ("spread", upstream default) shows it with Hunger/Encumbrance/Conditions
-// instead. We default to compact (denser, matches what we shipped earlier).
+// "spread" is Qt's icon-grid status widget (name plate, six attribute cards,
+// vitals, condition chips) — the default, sized for the top-right panel.
+// "compact" is the dense two-text-line strip (Qt's statuslines:2 analog).
 export type StatusLayout = "compact" | "spread";
+
+// Change-flash (qt_stat.cpp's green/red field highlighting): how a changed
+// field is tinted, and for how many BL_FLUSH renders it stays tinted (Qt
+// fades after ~3 keystrokes).
+type FlashDir = "up" | "down" | "changed";
+const FLASH_TTL = 3;
+// Fields where flashing is noise: title, score, time, exp-points (T changes
+// every turn; Xp level [13] still flashes).
+const NO_FLASH = new Set([0, 8, 16, 21]);
+// Fields where a numeric DECREASE is good (armor class).
+const INVERTED = new Set([14]);
 
 export class StatusBar {
   private vals = new Map<number, string>();
   private conditionMask = 0;
-  private layout: StatusLayout = "compact";
+  private layout: StatusLayout = "spread";
+  private flash = new Map<number, { dir: FlashDir; ttl: number }>();
+  private condFlash = { bits: 0, ttl: 0 };
+  private seenFirstFlush = false;
 
   constructor(
     private el: HTMLElement,
     private icons: StatusIcons,
   ) {}
 
+  /** Raw cached value of a field (for cross-component reads like the map cursor HP tint). */
+  value(idx: number): string | undefined {
+    return this.vals.get(idx);
+  }
+
   update(idx: number, val: string): void {
     // NetHack embeds glyphs in mixed text as "\G%04X%04X" (rndencode + glyph).
     // On the status line this only occurs for gold; render it as "$".
     const clean = val.replace(/\\G[0-9A-Fa-f]{8}/g, idx === 10 ? "$" : "");
+    const prev = this.vals.get(idx);
     this.vals.set(idx, clean);
+
+    // Qt flashes fields green (improved) / red (worsened) for a few updates.
+    // Only after the first full render — the initial burst isn't a "change".
+    if (!this.seenFirstFlush || NO_FLASH.has(idx) || prev === undefined || prev === clean) return;
+    const a = parseFloat(prev);
+    const b = parseFloat(clean);
+    let dir: FlashDir = "changed";
+    if (Number.isFinite(a) && Number.isFinite(b) && a !== b) {
+      dir = b > a !== INVERTED.has(idx) ? "up" : "down";
+    }
+    this.flash.set(idx, { dir, ttl: FLASH_TTL });
   }
 
   setCondition(mask: number): void {
+    // Newly-set condition bits flash on appearance (qt_stat.cpp).
+    const fresh = mask & ~this.conditionMask;
+    if (this.seenFirstFlush && fresh) this.condFlash = { bits: fresh, ttl: FLASH_TTL };
     this.conditionMask = mask;
   }
 
@@ -113,49 +152,115 @@ export class StatusBar {
     this.layout = layout;
   }
 
+  /** CSS class for a field's pending change-flash, consuming nothing. */
+  private flashClass(idx: number): string {
+    const f = this.flash.get(idx);
+    return f ? `flash-${f.dir}` : "";
+  }
+
+  /** Age out flash state by one render (called once per BL_FLUSH render). */
+  private decayFlash(): void {
+    for (const [idx, f] of this.flash) {
+      if (--f.ttl <= 0) this.flash.delete(idx);
+    }
+    if (this.condFlash.ttl > 0 && --this.condFlash.ttl <= 0) this.condFlash.bits = 0;
+  }
+
   render(): void {
     const frag = document.createDocumentFragment();
-    frag.appendChild(this.hpBar());
-    frag.appendChild(this.line(LINE1, true));
-    frag.appendChild(this.line(LINE2, false));
+    if (this.layout === "spread") {
+      // Qt's icon-grid status widget: name plate, HP/Pw bars, six attribute
+      // cards, then the vitals and condition rows.
+      const head = document.createElement("div");
+      head.className = "status-head";
+      head.textContent = this.vals.get(0) ?? "";
+      frag.appendChild(head);
+
+      const bars = document.createElement("div");
+      bars.className = "status-bars";
+      bars.appendChild(this.meterBar(18, 19, HP_COLOR));
+      bars.appendChild(this.meterBar(11, 12, () => "#4a7ab8"));
+      frag.appendChild(bars);
+
+      const attrs = document.createElement("div");
+      attrs.className = "status-attrs";
+      for (const idx of [1, 2, 3, 4, 5, 6]) {
+        const val = this.vals.get(idx);
+        if (val === undefined) continue;
+        const cell = document.createElement("div");
+        cell.className = "status-attr";
+        const fc = this.flashClass(idx);
+        if (fc) cell.classList.add(fc);
+        const icon = this.icons.render(ATTR_ICON[idx]!, 20);
+        if (icon) cell.appendChild(icon);
+        cell.appendChild(
+          document.createTextNode(`${(FIELD_FMT[idx] ?? "%s").replace("%s", val).trim()}`),
+        );
+        attrs.appendChild(cell);
+      }
+      frag.appendChild(attrs);
+
+      frag.appendChild(this.line(VITALS, false));
+      const cond = document.createElement("div");
+      cond.className = "status-line";
+      this.appendAlignment(cond);
+      this.appendHungerEncumberConditions(cond);
+      frag.appendChild(cond);
+    } else {
+      const bars = document.createElement("div");
+      bars.className = "status-bars";
+      bars.appendChild(this.meterBar(18, 19, HP_COLOR));
+      frag.appendChild(bars);
+      frag.appendChild(this.line(LINE1, true));
+      frag.appendChild(this.line(LINE2, false));
+    }
     this.el.replaceChildren(frag);
+    this.decayFlash();
+    this.seenFirstFlush = true;
   }
 
   // Qt's status window shows a color-coded HP bar above the title
   // (iflags.wc2_hitpointbar); simplified to 4 tiers instead of Qt's 6 since
   // several of theirs (e.g. "black" at 100%) assume a light-background theme.
-  private hpBar(): HTMLElement {
+  // The same meter renders Pw in fixed blue (Qt draws both bars).
+  private meterBar(idx: number, maxIdx: number, color: (pct: number) => string): HTMLElement {
     const bar = document.createElement("div");
     bar.className = "hp-bar";
-    const hp = Number(this.vals.get(18));
-    const hpmax = Number(this.vals.get(19));
-    if (Number.isFinite(hp) && Number.isFinite(hpmax) && hpmax > 0) {
-      const pct = Math.max(0, Math.min(1, hp / hpmax));
+    const val = Number(this.vals.get(idx));
+    const max = Number(this.vals.get(maxIdx));
+    if (Number.isFinite(val) && Number.isFinite(max) && max > 0) {
+      const pct = Math.max(0, Math.min(1, val / max));
       const fill = document.createElement("div");
       fill.className = "hp-bar-fill";
       fill.style.width = `${pct * 100}%`;
-      fill.style.background =
-        pct >= 0.5 ? "#3a9e3a" : pct >= 0.25 ? "#c9b93a" : pct >= 0.1 ? "#d67f2a" : "#c93a3a";
+      fill.style.background = color(pct);
       bar.appendChild(fill);
     }
     return bar;
   }
 
-  private line(indices: number[], isLine1: boolean): HTMLElement {
+  private line(indices: number[], compactLine1: boolean): HTMLElement {
     const row = document.createElement("div");
     row.className = "status-line";
     for (const idx of indices) {
       const val = this.vals.get(idx);
-      if (!val) continue;
+      // "" means the core cleared the field, but "0" is a real value
+      // (e.g. Pw:0) and must render.
+      if (val === undefined || val === "") continue;
       const icon = ATTR_ICON[idx];
-      if (icon) row.appendChild(this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val)));
-      else row.appendChild(this.text((FIELD_FMT[idx] ?? "%s").replace("%s", val)));
+      const chip = icon
+        ? this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val))
+        : this.text((FIELD_FMT[idx] ?? "%s").replace("%s", val));
+      const fc = this.flashClass(idx);
+      if (fc) chip.classList.add(fc);
+      row.appendChild(chip);
     }
-    if (isLine1) {
-      if (this.layout === "compact") this.appendAlignment(row);
-    } else {
-      if (this.layout === "spread") this.appendAlignment(row);
-      this.appendHungerEncumberConditions(row);
+    // Compact strip: alignment folds up next to Cha on line 1, and hunger/
+    // encumbrance/conditions trail line 2 (the icon-grid layout renders its
+    // own dedicated condition row instead).
+    if (this.layout === "compact") {
+      if (compactLine1) this.appendAlignment(row);
+      else this.appendHungerEncumberConditions(row);
     }
     return row;
   }
@@ -185,7 +290,9 @@ export class StatusBar {
 
     for (const [bit, name, icon] of CONDITIONS) {
       if (!(this.conditionMask & bit)) continue;
-      row.appendChild(icon ? this.iconChip(icon, ` ${name}`) : this.text(` ${name}`));
+      const chip = icon ? this.iconChip(icon, ` ${name}`) : this.text(` ${name}`);
+      if (this.condFlash.bits & bit) chip.classList.add("flash-changed");
+      row.appendChild(chip);
     }
   }
 
@@ -207,7 +314,12 @@ export class StatusBar {
     return span;
   }
 
-  private text(s: string): Text {
-    return document.createTextNode(s);
+  // Bare Text nodes don't wrap as flex items, so plain fields get a chip span
+  // too — that lets a narrow status panel wrap the vitals row cleanly.
+  private text(s: string): HTMLElement {
+    const span = document.createElement("span");
+    span.className = "status-chip";
+    span.textContent = s;
+    return span;
   }
 }

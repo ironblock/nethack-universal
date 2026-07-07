@@ -11,7 +11,7 @@
  * unhandled procs are logged so we can see what the core asks for next.
  */
 import type { NetHackModule } from "./emscripten";
-import { InputQueue } from "./input";
+import { InputQueue, cancelHeldRepeat } from "./input";
 import type { TileRenderer } from "./tiles";
 import type { MenuController, MenuItem, PermInventPanel } from "./menu";
 import type { PaperdollPanel } from "./paperdoll";
@@ -92,13 +92,21 @@ export class NetHackUI {
     this.extCmdCtl = extCmdCtl;
     this.tombstoneCtl = tombstoneCtl;
     this.status = new StatusBar(dom.status, statusIcons);
+    this.status.setLayout(this.pendingLayout);
   }
 
-  /** Qt's statuslines:2 ("compact") vs :3 ("spread") — see status.ts. */
+  private pendingLayout: StatusLayout = "spread";
+
+  /** Qt's statuslines analog — safe to call before bind() (boot-time apply). */
   setStatusLayout(layout: StatusLayout): void {
+    this.pendingLayout = layout;
+    if (!this.status) return;
     this.status.setLayout(layout);
     this.status.render();
   }
+
+  /** True while the core is suspended at the main command prompt (nh_poskey). */
+  awaitingCommand = false;
 
   /** Set true to trace every window-proc call to the console (capped). */
   debug = false;
@@ -124,12 +132,21 @@ export class NetHackUI {
       }
       case "shim_display_nhwindow": {
         const window = args[0] as number;
-        if (this.windowType.get(window) === NHW.TEXT) {
+        const blocking = args[1] as number | boolean;
+        const type = this.windowType.get(window);
+        if (type === NHW.TEXT) {
           const lines = this.textBuffers.get(window);
           if (lines?.length) {
+            cancelHeldRepeat();
             if (TombstoneController.isTombstone(lines)) await this.tombstoneCtl.show(lines);
             else await this.textWinCtl.show(lines);
           }
+        } else if (blocking && (type === NHW.MESSAGE || type === NHW.MAP)) {
+          // Qt appends "--More--" and blocks for space/Enter/Esc (qt_more,
+          // qt_bind.cpp:766-838); same for "press a key when done viewing
+          // the map". Without this, MSGTYPE=stop bursts and level feelings
+          // scroll past unacknowledged.
+          await this.more();
         }
         return;
       }
@@ -173,8 +190,35 @@ export class NetHackUI {
         return;
       }
       case "shim_putmsghistory": {
+        // Restores saved-game message history (and receives synthetic
+        // "remembered" lines). They're history, not fresh news — log dim,
+        // but keep them in msgHistory so they survive the NEXT save too.
         const str = args[0] as string;
-        if (str) this.log(str);
+        if (str) {
+          this.log(str, true);
+          this.msgHistory.push(str);
+        }
+        return;
+      }
+      case "shim_getmsghistory":
+        // MUST stay "": the shim's string-return marshaling writes the
+        // returned bytes over the 4-byte `char *ret` stack slot
+        // (setPointerValue case "s" → stringToUTF8(value, ret_ptr, 1024),
+        // libnhmain.c — the in-tree "danger will robinson" TODO), so any
+        // non-empty return smashes the shim's stack and wedges Asyncify
+        // mid-save. Message-history persistence is done UI-side instead:
+        // exit_nhwindows stores the log per adventurer (localStorage) and
+        // main.ts replays it on resume — same player-visible outcome as
+        // Qt's save-file history, different channel.
+        return "";
+      case "shim_doprev_message":
+        // ^P: Qt scrolls the message window back; page the log up.
+        this.dom.messages.scrollTop -= this.dom.messages.clientHeight * 0.9;
+        return 0;
+      case "shim_display_file": {
+        // Help files live inside the core's dlb archive, which JS can't
+        // read; an honest notice beats silently ignoring '?' entries.
+        this.log(`[The text of "${args[0] as string}" isn't available in the browser port yet.]`, true);
         return;
       }
 
@@ -183,8 +227,17 @@ export class NetHackUI {
 
       case "shim_nh_poskey": {
         // Returns a keystroke, or 0 for a map click (with *x,*y,*mod filled).
+        // The moveloop's command prompt waits here — while suspended, menubar/
+        // toolbar dispatch is safe (Qt's ok_for_command analog).
         const [xPtr, yPtr, modPtr] = args as [number, number, number];
+        this.awaitingCommand = true;
+        this.scheduleIdleFlush();
         const ev = await this.input.next();
+        this.cancelIdleFlush();
+        this.awaitingCommand = false;
+        // The player acted: messages logged so far stop being "new" once the
+        // next one arrives (Qt's newest-message bold / turn unhighlight).
+        this.msgTurnBoundary = true;
         if (ev.kind === "mouse") {
           if (xPtr) this.mod.setValue(xPtr, ev.x, "i16");
           if (yPtr) this.mod.setValue(yPtr, ev.y, "i16");
@@ -205,7 +258,15 @@ export class NetHackUI {
         // Wait for a valid response key (interactive — never auto-answer).
         for (;;) {
           const key = await this.input.nextKey();
-          if (!resp) return key; // no constraint: any key
+          if (!resp) {
+            // No constraint: any ASCII key. NEVER return >127 — the shim's
+            // 'c' return marshal (setPointerValue case "c") throws on values
+            // >128, and a throw before wakeUp() wedges Asyncify forever. A
+            // meta-encoded Alt+letter at "What do you want to eat?" was a
+            // reproducible full-game freeze.
+            if (key >= 0 && key <= 127) return key;
+            continue;
+          }
           if (key === 13 || key === 10) return def || resp.charCodeAt(0); // Enter → default
           if (key === 27) return resp.includes("q") ? "q".charCodeAt(0) : def || 27; // Esc
           if (resp.includes(String.fromCharCode(key))) return key;
@@ -216,6 +277,7 @@ export class NetHackUI {
       case "shim_getlin": {
         // query (string), bufp (pointer we must fill with the typed line).
         const bufp = args[1] as number;
+        cancelHeldRepeat();
         const line = await this.promptCtl.getLine(args[0] as string);
         if (bufp) this.mod.stringToUTF8(line, bufp, 256);
         return;
@@ -236,16 +298,21 @@ export class NetHackUI {
       case "shim_add_menu": {
         const menu = this.menus.get(args[0] as number);
         if (menu) {
+          // winshim.c: (window, glyphinfo, identifier, ch, gch, attr, clr, str, itemflags)
           const glyphinfo = args[1] as number;
           const identifier = args[2] as number; // fmt 'i' → low 32 bits of anything
           const glyph = glyphinfo ? this.mod.getValue(glyphinfo + GLYPHINFO_GLYPH_OFFSET, "i32") : -1;
+          const itemflags = (args[8] as number) ?? 0;
           menu.items.push({
             identifier,
             accel: args[3] as number,
+            groupAccel: (args[4] as number) ?? 0,
             glyph,
             text: (args[7] as string) ?? "",
+            attr: (args[5] as number) ?? 0,
+            color: (args[6] as number) ?? 8, // NO_COLOR
             selectable: identifier !== 0, // zero identifier = header/text line
-            preselected: false,
+            preselected: (itemflags & 0x1) !== 0, // MENU_ITEMFLAGS_SELECTED
           });
         }
         return;
@@ -273,6 +340,7 @@ export class NetHackUI {
           return 0;
         }
 
+        cancelHeldRepeat();
         const picks = await this.menuCtl.show(menu.prompt, menu.items, how);
 
         if (picks.length === 0) {
@@ -301,13 +369,16 @@ export class NetHackUI {
       case "shim_doprev_message":
         return -1;
       case "shim_get_ext_cmd":
+        cancelHeldRepeat();
         return this.extCmdCtl.choose();
       case "set_shim_font_name":
         return 0;
 
       case "shim_curs": {
-        // Cursor placement on the map window ≈ the hero's cell; follow it.
+        // Cursor placement on the map window: draw the HP-colored cursor
+        // rectangle there (qt_map.cpp) and keep the viewport following it.
         if (this.windowType.get(args[0] as number) === NHW.MAP) {
+          this.renderer.setCursor(args[1] as number, args[2] as number);
           this.renderer.centerOn(args[1] as number, args[2] as number);
         }
         return;
@@ -326,14 +397,32 @@ export class NetHackUI {
         } else if (idx === BL_CONDITION) {
           if (ptr) this.status.setCondition(this.mod.getValue(ptr, "i32"));
         } else if (ptr) {
-          this.status.update(idx, this.mod.UTF8ToString(ptr));
+          const val = this.mod.UTF8ToString(ptr);
+          this.status.update(idx, val);
+          // Keep the map cursor's HP tint current (BL_HP=18 / BL_HPMAX=19).
+          if (idx === 18 || idx === 19) {
+            const hp = Number(this.status.value(18));
+            const hpmax = Number(this.status.value(19));
+            if (Number.isFinite(hp) && Number.isFinite(hpmax)) {
+              this.renderer.setCursorHealth(hp, hpmax);
+            }
+          }
         }
         return;
       }
 
       case "shim_exit_nhwindows":
-        // Game is ending (save / quit / death) — flush the save/record to IndexedDB.
+        // Game is ending (save / quit / death) — flush the save/record to
+        // IndexedDB, and stash the message log for resume (see
+        // shim_getmsghistory for why the core can't carry it).
+        this.saveMessageHistory();
         await this.storage.save();
+        return;
+
+      case "shim_delay_output":
+        // Animation pacing (explosions, thrown objects): Qt sleeps 50ms
+        // (qt_delay.cpp). Asyncify suspends cleanly on the awaited timer.
+        await new Promise((r) => setTimeout(r, 45));
         return;
 
       // Known-but-ignored for now.
@@ -342,13 +431,11 @@ export class NetHackUI {
       case "shim_get_nh_event":
       case "shim_suspend_nhwindows":
       case "shim_resume_nhwindows":
-      case "shim_display_file":
       case "shim_mark_synch":
       case "shim_wait_synch":
       case "shim_update_positionbar":
       case "shim_nhbell":
       case "shim_number_pad":
-      case "shim_delay_output":
       case "shim_change_color":
       case "shim_change_background":
       case "shim_preference_update":
@@ -365,10 +452,107 @@ export class NetHackUI {
     }
   };
 
-  private log(line: string): void {
+  // Message log state: history for save/restore, the new-message highlight
+  // boundary, and a DOM cap so a long game doesn't accumulate tens of
+  // thousands of divs.
+  private msgHistory: string[] = [];
+  private msgTurnBoundary = false;
+  private static readonly MSG_CAP = 200;
+
+  /** Set by main.ts once the adventurer is chosen; keys history storage. */
+  playerName = "";
+
+  // Idle checkpoint (qt_bind.cpp's IDLECHECKPOINT): after sitting at the
+  // command prompt for a while, flush the in-memory FS to IndexedDB so a tab
+  // crash or teardown race doesn't lose whatever the core has written
+  // (record, bones, a just-completed save racing pagehide). Rate-limited —
+  // syncfs isn't free.
+  private idleFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastIdleFlush = 0;
+  private static readonly IDLE_FLUSH_DELAY_MS = 10_000;
+  private static readonly IDLE_FLUSH_MIN_GAP_MS = 30_000;
+
+  private scheduleIdleFlush(): void {
+    if (this.idleFlushTimer !== null) return;
+    if (Date.now() - this.lastIdleFlush < NetHackUI.IDLE_FLUSH_MIN_GAP_MS) return;
+    this.idleFlushTimer = setTimeout(() => {
+      this.idleFlushTimer = null;
+      this.lastIdleFlush = Date.now();
+      void this.storage.save();
+    }, NetHackUI.IDLE_FLUSH_DELAY_MS);
+  }
+
+  private cancelIdleFlush(): void {
+    if (this.idleFlushTimer === null) return;
+    clearTimeout(this.idleFlushTimer);
+    this.idleFlushTimer = null;
+  }
+
+  private historyKey(): string {
+    return `nhu.msghist.${this.playerName}`;
+  }
+
+  private saveMessageHistory(): void {
+    if (!this.playerName) return;
+    try {
+      localStorage.setItem(this.historyKey(), JSON.stringify(this.msgHistory.slice(-50)));
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /** Replay a previous session's log (dim) when resuming a save. */
+  restoreMessageHistory(): void {
+    if (!this.playerName) return;
+    try {
+      const lines = JSON.parse(localStorage.getItem(this.historyKey()) ?? "[]") as string[];
+      for (const line of lines) this.log(line, true);
+    } catch {
+      /* best effort */
+    }
+  }
+
+  /** Drop stored history (fresh adventurer under a reused name). */
+  clearMessageHistory(): void {
+    if (!this.playerName) return;
+    try {
+      localStorage.removeItem(this.historyKey());
+    } catch {
+      /* best effort */
+    }
+  }
+
+  private log(line: string, dim = false): void {
+    if (this.msgTurnBoundary) {
+      this.msgTurnBoundary = false;
+      for (const el of this.dom.messages.querySelectorAll(".msg-new")) el.classList.remove("msg-new");
+    }
     const el = document.createElement("div");
     el.textContent = line;
+    if (!dim) {
+      el.className = "msg-new";
+      this.msgHistory.push(line);
+      if (this.msgHistory.length > NetHackUI.MSG_CAP) this.msgHistory.shift();
+    }
     this.dom.messages.appendChild(el);
+    while (this.dom.messages.childElementCount > NetHackUI.MSG_CAP) {
+      this.dom.messages.firstElementChild?.remove();
+    }
     this.dom.messages.scrollTop = this.dom.messages.scrollHeight;
+  }
+
+  /** Append a --More-- chip to the message log and wait for space/Enter/Esc. */
+  private async more(): Promise<void> {
+    cancelHeldRepeat();
+    const chip = document.createElement("div");
+    chip.className = "more-chip";
+    chip.textContent = "--More--";
+    this.dom.messages.appendChild(chip);
+    this.dom.messages.scrollTop = this.dom.messages.scrollHeight;
+    for (;;) {
+      const key = await this.input.nextKey();
+      if (key === 32 || key === 13 || key === 10 || key === 27) break;
+    }
+    chip.remove();
   }
 }

@@ -17,23 +17,15 @@ import { PaperdollPanel } from "./paperdoll";
 import { PromptController } from "./prompt";
 import { IdbfsStorage } from "./persistence";
 import { SaveSelectController } from "./saveselect";
+import { CharPickController } from "./charpick";
 import { TextWindowController } from "./textwindow";
 import { TombstoneController } from "./tombstone";
 import { ExtCmdController } from "./extcmd";
+import { wireLayout } from "./layout";
+import { wireMenubar } from "./menubar";
+import { loadSettings, applySettings, wireSettingsDialog, settingsRcLines } from "./settings";
 import { StatusIcons } from "./statusicons";
-import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
-import type { StatusLayout } from "./status";
 import { BASE_URL } from "./base";
-
-const TILE_SIZE_STEP = 8;
-// Qt's Settings dialog offers Tiny/Small/Medium/Large/Huge for message+status text.
-const FONT_SIZES: Array<[label: string, px: number]> = [
-  ["Tiny", 10],
-  ["Small", 12],
-  ["Medium", 14],
-  ["Large", 16],
-  ["Huge", 20],
-];
 
 const CALLBACK_NAME = "nethackCallback";
 
@@ -49,8 +41,7 @@ async function boot(): Promise<void> {
   const renderer = new TileRenderer();
   await renderer.load();
   renderer.attach(byId("map") as HTMLCanvasElement);
-  wireTileSizeControls(renderer);
-  wireFontSizeControls();
+  wireLayout();
 
   const menuCtl = new MenuController(byId("overlay"), renderer);
   const promptCtl = new PromptController(byId("overlay"));
@@ -67,10 +58,33 @@ async function boot(): Promise<void> {
   // The shim looks up the callback by name on globalThis.
   (globalThis as Record<string, unknown>)[CALLBACK_NAME] = ui.callback;
   (globalThis as Record<string, unknown>).__nh = { ui, renderer, menuCtl, promptCtl, tombstoneCtl }; // debug handle
-  attachKeyboard(ui.input);
-  // Click a map cell to travel there (left) or look (right).
+  // Click a map cell to travel there (left) or look (right). (The game
+  // KEYBOARD is attached later, right before callMain — otherwise keys
+  // pressed on the splash/save-select/character-pick screens queue up and
+  // replay as game commands the moment the game starts.)
   renderer.onCellClick((x, y, button) => ui.input.push({ kind: "mouse", x, y, button }));
-  wireStatusLayoutControl(ui);
+
+  // Settings (qt_set.cpp): persisted write-through; re-applied every boot.
+  const settings = loadSettings();
+  const settingsHost = { renderer, setStatusLayout: (l: Parameters<typeof ui.setStatusLayout>[0]) => ui.setStatusLayout(l) };
+  applySettings(settings, settingsHost);
+  wireSettingsDialog(byId("settings-btn"), byId("overlay"), settingsHost);
+
+  // Menubar + toolbar (qt_main.cpp): items dispatch extended commands by
+  // priming the '#' palette, gated on the core waiting at a command prompt.
+  const dispatchCommand = (cmd: string): boolean => {
+    if (!ui.awaitingCommand) return false;
+    if (cmd !== "#" && !extCmdCtl.prime(cmd)) return false;
+    ui.input.pushKey("#".charCodeAt(0));
+    return true;
+  };
+  wireMenubar(byId("menubar"), byId("toolbar"), {
+    baseUrl: BASE_URL,
+    hasCommand: (cmd) => cmd === "#" || extCmdCtl.has(cmd),
+    dispatch: dispatchCommand,
+  });
+  // Clicking the equipment doll shows what's in use (qt_inv.cpp → #seeall).
+  paperdoll.onClick = () => void dispatchCommand("seeall");
 
   // Emscripten ES6 module: default export is the factory. It lives in /public
   // and is served as-is; hide the specifier from Vite's import-analysis so the
@@ -94,16 +108,12 @@ async function boot(): Promise<void> {
         m.ENV.NETHACKDIR = "/"; // embedded data (nhdat, sysconf) is at FS root
         m.ENV.HACKDIR = "/";
         m.ENV.USER = "Adventurer"; // placeholder; overwritten after the save-select screen
-        // Fully specify the character AND disable the 5.0 tutorial prompt — it's
-        // a forced PICK_ONE menu that would loop until we implement real menu
-        // selection (Phase 2). !legacy skips the intro poem's --More--.
-        // Real character selection now works via the menu system (Phase 2), so
-        // we no longer pre-specify role/race/gender/align. !tutorial keeps the
-        // tutorial prompt off; time/showexp drive the status line. hilite_pet/
-        // hilite_pile are Off by default upstream (NHOPTB Off) — Qt players
-        // typically turn them on; we do it for them, matching tiles.ts's
-        // pet/pile marker overlays.
-        m.ENV.NETHACKOPTIONS = "!tutorial,!legacy,time,showexp,hilite_pet,hilite_pile";
+        // !tutorial keeps the 5.0 tutorial prompt off; !legacy skips the intro
+        // poem's --More--; time/showexp drive the status line. hilite_pet/
+        // hilite_pile moved to the generated .nethackrc (settings.ts) — the
+        // RC file is read BEFORE this env var, and env "extra options" would
+        // override it, so user-facing toggles must not live here.
+        m.ENV.NETHACKOPTIONS = "!tutorial,!legacy,time,showexp";
       },
     ],
   };
@@ -120,15 +130,51 @@ async function boot(): Promise<void> {
   // Qt's qt_svsel.cpp: pick an existing saved adventurer to resume, or start a
   // new one. Saves are parsed from "<uid><plname>" filenames (files.c
   // set_savefile_name) — our WASM build has a fixed uid, so it's just a
-  // leading digit run to strip.
+  // leading digit run to strip. A new adventurer continues into the graphical
+  // character picker (qt_plsel.cpp); its choice reaches the core purely via
+  // options, so genl_player_setup finds a fully-specified character and never
+  // shows its fallback menus. Backing out of the picker returns to this screen.
   dismissSplash();
   const saveSelectCtl = new SaveSelectController(byId("saveselect"));
-  const playerName = await saveSelectCtl.choose(storage.listSaves());
+  const charPickCtl = new CharPickController(byId("saveselect"), renderer);
+  await charPickCtl.load();
+  let playerName: string;
+  // ENV mutations after runtime init don't reach the core (emscripten
+  // snapshots the environment), so per-session options go through the RC
+  // file: cfgfiles.c reads $HOME/.nethackrc (HOME defaults to /home/web_user
+  // in emscripten's MEMFS) during initoptions, then applies NETHACKOPTIONS —
+  // the static prefs — on top as extra options. Persisted settings always
+  // contribute lines; a new character adds its role/race/gender/align.
+  let rc = settingsRcLines(settings);
+  let resuming = false;
+  for (;;) {
+    const save = await saveSelectCtl.choose(storage.listSaves());
+    if (save.kind === "resume") {
+      playerName = save.name;
+      resuming = true;
+      break;
+    }
+    const choice = await charPickCtl.pick(save.name);
+    if (!choice) continue; // Back → save select again
+    playerName = choice.name;
+    rc += `OPTIONS=role:${choice.role}\nOPTIONS=race:${choice.race}\nOPTIONS=gender:${choice.gender}\nOPTIONS=align:${choice.align}\n`;
+    break;
+  }
+  m.FS.writeFile("/home/web_user/.nethackrc", rc);
   m.ENV.USER = playerName;
+  ui.playerName = playerName;
 
   ui.bind(m, dom, renderer, menuCtl, promptCtl, storage, textWinCtl, permInvent, extCmdCtl, statusIcons, tombstoneCtl, paperdoll);
+  // Message-log continuity across save/resume lives UI-side (see
+  // shim_getmsghistory in nethack.ts for why the core can't carry it).
+  if (resuming) ui.restoreMessageHistory();
+  else ui.clearMessageHistory();
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
+
+  // Only now start feeding keys to the game, with a clean queue.
+  ui.input.clear();
+  attachKeyboard(ui.input);
 
   // Asyncify: callMain returns as soon as the core suspends for input.
   try {
@@ -146,64 +192,6 @@ function byId(id: string): HTMLElement {
   const el = document.getElementById(id);
   if (!el) throw new Error(`missing #${id}`);
   return el;
-}
-
-/** Adjustable tile size (Qt exposes this via 'tile_width'/'tile_height'; we do it client-side). */
-function wireTileSizeControls(renderer: TileRenderer): void {
-  const dec = byId("tilesize-dec") as HTMLButtonElement;
-  const inc = byId("tilesize-inc") as HTMLButtonElement;
-  const sync = () => {
-    dec.disabled = renderer.renderSize <= MIN_RENDER_SIZE;
-    inc.disabled = renderer.renderSize >= MAX_RENDER_SIZE;
-  };
-  dec.addEventListener("click", () => {
-    renderer.setSize(renderer.renderSize - TILE_SIZE_STEP);
-    sync();
-  });
-  inc.addEventListener("click", () => {
-    renderer.setSize(renderer.renderSize + TILE_SIZE_STEP);
-    sync();
-  });
-  sync();
-}
-
-/** Message/status text size (Qt's Settings dialog font-size dropdown). */
-function wireFontSizeControls(): void {
-  const dec = byId("fontsize-dec") as HTMLButtonElement;
-  const inc = byId("fontsize-inc") as HTMLButtonElement;
-  const label = byId("fontsize-label");
-  let idx = FONT_SIZES.findIndex(([, px]) => `${px}px` === getComputedStyle(document.documentElement).getPropertyValue("--hud-font-size").trim());
-  if (idx < 0) idx = 2; // Medium
-
-  const apply = () => {
-    const entry = FONT_SIZES[idx];
-    if (!entry) return;
-    const [name, px] = entry;
-    document.documentElement.style.setProperty("--hud-font-size", `${px}px`);
-    label.textContent = name;
-    dec.disabled = idx <= 0;
-    inc.disabled = idx >= FONT_SIZES.length - 1;
-  };
-  dec.addEventListener("click", () => {
-    idx = Math.max(0, idx - 1);
-    apply();
-  });
-  inc.addEventListener("click", () => {
-    idx = Math.min(FONT_SIZES.length - 1, idx + 1);
-    apply();
-  });
-  apply();
-}
-
-/** Qt's iflags.wc2_statuslines (2="compact"/3="spread") — see status.ts. */
-function wireStatusLayoutControl(ui: NetHackUI): void {
-  const toggle = byId("statuslayout-toggle") as HTMLButtonElement;
-  let layout: StatusLayout = "compact";
-  toggle.addEventListener("click", () => {
-    layout = layout === "compact" ? "spread" : "compact";
-    toggle.textContent = layout === "compact" ? "Compact" : "Spread";
-    ui.setStatusLayout(layout);
-  });
 }
 
 /** Qt shows a version/attribution splash at startup and character select. */
