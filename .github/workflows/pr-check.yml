@@ -84,3 +84,4 @@ jobs:
 
       - name: Build UI (project-page base path)
         run: npm run build -w @nethack-universal/ui -- --base=/${{ github.event.repository.name }}/
+# CI cache verification touch
