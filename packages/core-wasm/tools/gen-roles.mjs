@@ -19,7 +19,8 @@
  * MH_* (= M2_*) monster-herd bits; each race's `selfmask` is one of them, and
  * a race is valid for a role iff (role.allow & race.selfmask) != 0.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -51,7 +52,7 @@ const ALIGN_BITS = [
 ];
 
 function main() {
-  const pmIndex = parseMonsterEnum(readFileSync(join(NH, "include", "monsters.h"), "utf8"));
+  const pmIndex = parseMonsterEnum();
   const nummons = Object.keys(pmIndex).length;
   const roleSrc = readFileSync(join(NH, "src", "role.c"), "utf8");
 
@@ -86,9 +87,41 @@ function main() {
   // happened: a stray comment cost the Rogue) must fail the build instead.
   if (roles.length !== 13) throw new Error(`parsed ${roles.length} roles, expected 13`);
   if (races.length !== 5) throw new Error(`parsed ${races.length} races, expected 5`);
+  validatePortraits(pmIndex, roles);
 
   writeFileSync(OUT, JSON.stringify({ nummons, roles, races }, null, 1));
   console.log(`roles.json: ${roles.length} roles, ${races.length} races, NUMMONS=${nummons}`);
+}
+
+/**
+ * Closed-loop portrait check: win/share/monsters.txt names each tile in
+ * mons[] order ("# tile 676 (archeologist,male)"), and glyph2tile.json (from
+ * the same tilemap run that laid out the sheet) maps male glyph == mnum to a
+ * tile. If mnum is right, glyph2tile[mnum] must equal the tile number
+ * monsters.txt gives that monster's male form. This is exactly the check
+ * that would have caught the +7 enum drift.
+ */
+function validatePortraits(pmIndex, roles) {
+  const tilesTxt = readFileSync(join(NH, "win", "share", "monsters.txt"), "utf8");
+  const tileByName = new Map();
+  for (const m of tilesTxt.matchAll(/^# tile (\d+) \(([^),]+),male\)/gm)) {
+    tileByName.set(m[2], Number(m[1]));
+  }
+  const glyph2tile = JSON.parse(
+    readFileSync(join(ROOT, "packages", "ui", "public", "tiles", "glyph2tile.json"), "utf8"),
+  );
+  const nameOf = new Map(Object.entries(pmIndex).map(([bn, idx]) => [idx, bn]));
+  for (const role of roles) {
+    const bn = nameOf.get(role.mnum);
+    const expected = tileByName.get(bn.toLowerCase().replace(/_/g, " "));
+    if (expected === undefined) continue; // tile name ≠ bn transform; skip
+    if (glyph2tile[role.mnum] !== expected) {
+      throw new Error(
+        `${role.name}: glyph2tile[${role.mnum}] = ${glyph2tile[role.mnum]}, ` +
+          `but monsters.txt says tile ${expected} — monster enum drift?`,
+      );
+    }
+  }
 }
 
 const MASK_RACES = [
@@ -99,17 +132,31 @@ const MASK_RACES = [
   ["orc", MASK.MH_ORC],
 ];
 
-/** MON(...) entries in order → { BASENAME: index }. The base name is the last argument. */
-function parseMonsterEnum(src) {
+/**
+ * MON(...) entries in order → { BASENAME: index }, i.e. the PM_ enum values.
+ *
+ * MUST go through the preprocessor: monsters.h has "#if 0 DEFERRED" blocks
+ * and #ifdef'd entries (CHARON excluded, MAIL_STRUCTURES included — the
+ * latter unconditionally set by global.h), and naively counting raw MON(
+ * occurrences over-counted by 7 — which shifted every role portrait onto
+ * the wrong monster (Caveman wore the Samurai's face). MAIL_STRUCTURES is
+ * defined here to mirror global.h since the wrapper doesn't drag config in.
+ */
+function parseMonsterEnum() {
+  const wrapperDir = join(ROOT, "packages", "core-wasm", "artifacts");
+  mkdirSync(wrapperDir, { recursive: true });
+  const wrapper = join(wrapperDir, "monenum.c");
+  writeFileSync(
+    wrapper,
+    "#define MAIL_STRUCTURES /* global.h defines it unconditionally */\n" +
+      "#define MON(nam, sym, lvl, gen, atk, siz, mr1, mr2, flg1, flg2, flg3, d, col, bn) @MON@ bn\n" +
+      '#include "monsters.h"\n',
+  );
+  const out = execFileSync("cc", ["-E", "-I", join(NH, "include"), wrapper], { encoding: "utf8" });
   const map = {};
   let i = 0;
-  const re = /^\s{4}MON\(/gm;
-  let m;
-  while ((m = re.exec(src))) {
-    const body = balanced(src, m.index + m[0].length - 1);
-    const bn = body.slice(0, -1).trim().split(/[\s,]+/).pop();
-    if (!/^[A-Z0-9_]+$/.test(bn)) throw new Error(`bad MON base name: ${bn}`);
-    map[bn] = i++;
+  for (const m of out.matchAll(/@MON@\s+([A-Z0-9_]+)/g)) {
+    map[m[1]] = i++;
   }
   if (i < 300) throw new Error(`only ${i} MON entries parsed — format change?`);
   return map;

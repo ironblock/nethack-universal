@@ -229,10 +229,13 @@ export class CharPickController {
           ),
         );
 
+        // Race cards are text-only: the race monster tile (a generic "dwarf"
+        // etc.) is never what YOUR character looks like on the map — showing
+        // it reads as "you'll look like this", which is wrong and confusing.
         const vr = validRaces();
         raceCol.body.replaceChildren(
           ...races.map((r, i) =>
-            card(r.noun, r.mnum, { selected: i === raceIdx, valid: !!vr[i] }, () => {
+            card(r.noun, null, { selected: i === raceIdx, valid: !!vr[i] }, () => {
               raceIdx = i;
               reconcile();
               render();
