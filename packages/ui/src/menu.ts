@@ -94,8 +94,11 @@ export class MenuController {
   show(prompt: string, items: MenuItem[], how: number): Promise<MenuPick[]> {
     assignAccelerators(items);
     padTabColumns(items);
+    // Preselected rows start selected for PICK_ONE too — Qt's accept()
+    // harvests the checked row, so Ok on a preselected PICK_ONE menu must
+    // return it (not resolve as a cancel), and None must be able to clear it.
     const selected = new Set<MenuItem>(
-      how === PICK_ANY ? items.filter((i) => i.selectable && i.preselected) : [],
+      how !== PICK_NONE ? items.filter((i) => i.selectable && i.preselected) : [],
     );
     const counts = new Map<MenuItem, number>(); // explicit partial-stack counts
     const preselCt = items.filter((i) => i.selectable && i.preselected).length;
@@ -274,8 +277,14 @@ export class MenuController {
 
       const onKey = (e: KeyboardEvent) => {
         if (e.target === searchBox) return; // search box handles its own keys
+        // Browser shortcuts (Cmd+C, Ctrl+F, Cmd+R…) stay native, not menu picks.
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         e.preventDefault();
         e.stopPropagation();
+        // Bare modifier / function / navigation keydowns are swallowed but
+        // never act (Qt's keyValue()==0 bail-out) — otherwise Shift alone
+        // would dismiss a PICK_NONE menu before the shifted character lands.
+        if (e.key.length !== 1 && !["Escape", "Enter", "Backspace"].includes(e.key)) return;
         if (how === PICK_NONE) return finish([]);
         if (e.key === "Escape") {
           if (counting()) return clearCount();
@@ -283,11 +292,13 @@ export class MenuController {
           return finish([]);
         }
         if (e.key === "Enter" || (how === PICK_ANY && e.key === " ")) {
-          // PICK_ONE accepts a lone preselected item (qt_menu SelectMenu).
+          // PICK_ONE accepts the LIVE selection (preselected unless the
+          // user cleared/changed it via None/All/Invert) — Qt's accept().
           if (how === PICK_ONE) {
-            const pre = items.find((i) => i.selectable && i.preselected);
-            if (preselCt === 1 && pre) return finish([{ identifier: pre.identifier, count: -1 }]);
-            return finish([]);
+            const sel = [...selected];
+            return finish(
+              sel.length === 1 ? [{ identifier: sel[0]!.identifier, count: -1 }] : [],
+            );
           }
           return accept();
         }

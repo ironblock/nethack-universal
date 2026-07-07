@@ -67,13 +67,18 @@ function wireDrag(handle: HTMLElement, onMove: (e: PointerEvent) => Partial<Layo
     const move = (e: PointerEvent) => {
       last = onMove(e);
     };
-    const up = () => {
+    // pointercancel too: without it a cancelled drag (touch scroll, alt-tab)
+    // leaves the move listener attached and the pane follows a hovering
+    // pointer with no button held.
+    const end = () => {
       handle.removeEventListener("pointermove", move);
-      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
       savePrefs(last);
     };
     handle.addEventListener("pointermove", move);
-    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
   });
 }
 

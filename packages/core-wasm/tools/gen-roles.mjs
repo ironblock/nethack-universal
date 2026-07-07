@@ -82,6 +82,11 @@ function main() {
     };
   });
 
+  // NUM_ROLES is 13 and NUM_RACES 5 in 5.0 — a silent parse drop (it
+  // happened: a stray comment cost the Rogue) must fail the build instead.
+  if (roles.length !== 13) throw new Error(`parsed ${roles.length} roles, expected 13`);
+  if (races.length !== 5) throw new Error(`parsed ${races.length} races, expected 5`);
+
   writeFileSync(OUT, JSON.stringify({ nummons, roles, races }, null, 1));
   console.log(`roles.json: ${roles.length} roles, ${races.length} races, NUMMONS=${nummons}`);
 }
@@ -118,8 +123,11 @@ function tableEntries(src, marker) {
   const body = balanced(src, open).slice(1, -1);
   const entries = [];
   for (const entry of splitDepth0(body)) {
-    const trimmed = entry.trim();
-    if (!trimmed.startsWith("{")) continue; // terminator macro / comments
+    // Strip block comments BEFORE the brace check — a comment between
+    // entries (e.g. the one preceding Rogue in role.c) otherwise makes the
+    // chunk fail startsWith("{") and silently drops that role.
+    const trimmed = entry.replace(/\/\*[\s\S]*?\*\//g, "").trim();
+    if (!trimmed.startsWith("{")) continue; // terminator macro
     const fields = splitDepth0(trimmed.slice(1, -1)).map((f) => f.trim());
     if (fields.length > 5) entries.push(fields);
   }

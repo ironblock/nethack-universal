@@ -93,8 +93,12 @@ export class TextWindowController {
 
       const onKey = (e: KeyboardEvent) => {
         if (e.target === searchBox) return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return; // browser shortcuts stay native
         e.preventDefault();
         e.stopPropagation();
+        // A bare Shift keydown must not dismiss the window — it precedes the
+        // ':' (Shift+;) that opens search. Only real keys act.
+        if (e.key.length !== 1 && !["Escape", "Enter"].includes(e.key)) return;
         if (e.key === ":") return openSearch(); // MENU_SEARCH
         finish();
       };

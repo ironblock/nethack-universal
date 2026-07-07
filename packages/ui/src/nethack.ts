@@ -11,7 +11,7 @@
  * unhandled procs are logged so we can see what the core asks for next.
  */
 import type { NetHackModule } from "./emscripten";
-import { InputQueue } from "./input";
+import { InputQueue, cancelHeldRepeat } from "./input";
 import type { TileRenderer } from "./tiles";
 import type { MenuController, MenuItem, PermInventPanel } from "./menu";
 import type { PaperdollPanel } from "./paperdoll";
@@ -137,6 +137,7 @@ export class NetHackUI {
         if (type === NHW.TEXT) {
           const lines = this.textBuffers.get(window);
           if (lines?.length) {
+            cancelHeldRepeat();
             if (TombstoneController.isTombstone(lines)) await this.tombstoneCtl.show(lines);
             else await this.textWinCtl.show(lines);
           }
@@ -257,7 +258,15 @@ export class NetHackUI {
         // Wait for a valid response key (interactive — never auto-answer).
         for (;;) {
           const key = await this.input.nextKey();
-          if (!resp) return key; // no constraint: any key
+          if (!resp) {
+            // No constraint: any ASCII key. NEVER return >127 — the shim's
+            // 'c' return marshal (setPointerValue case "c") throws on values
+            // >128, and a throw before wakeUp() wedges Asyncify forever. A
+            // meta-encoded Alt+letter at "What do you want to eat?" was a
+            // reproducible full-game freeze.
+            if (key >= 0 && key <= 127) return key;
+            continue;
+          }
           if (key === 13 || key === 10) return def || resp.charCodeAt(0); // Enter → default
           if (key === 27) return resp.includes("q") ? "q".charCodeAt(0) : def || 27; // Esc
           if (resp.includes(String.fromCharCode(key))) return key;
@@ -268,6 +277,7 @@ export class NetHackUI {
       case "shim_getlin": {
         // query (string), bufp (pointer we must fill with the typed line).
         const bufp = args[1] as number;
+        cancelHeldRepeat();
         const line = await this.promptCtl.getLine(args[0] as string);
         if (bufp) this.mod.stringToUTF8(line, bufp, 256);
         return;
@@ -330,6 +340,7 @@ export class NetHackUI {
           return 0;
         }
 
+        cancelHeldRepeat();
         const picks = await this.menuCtl.show(menu.prompt, menu.items, how);
 
         if (picks.length === 0) {
@@ -358,6 +369,7 @@ export class NetHackUI {
       case "shim_doprev_message":
         return -1;
       case "shim_get_ext_cmd":
+        cancelHeldRepeat();
         return this.extCmdCtl.choose();
       case "set_shim_font_name":
         return 0;
@@ -531,6 +543,7 @@ export class NetHackUI {
 
   /** Append a --More-- chip to the message log and wait for space/Enter/Esc. */
   private async more(): Promise<void> {
+    cancelHeldRepeat();
     const chip = document.createElement("div");
     chip.className = "more-chip";
     chip.textContent = "--More--";

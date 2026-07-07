@@ -244,7 +244,9 @@ export class StatusBar {
     row.className = "status-line";
     for (const idx of indices) {
       const val = this.vals.get(idx);
-      if (!val) continue;
+      // "" means the core cleared the field, but "0" is a real value
+      // (e.g. Pw:0) and must render.
+      if (val === undefined || val === "") continue;
       const icon = ATTR_ICON[idx];
       const chip = icon
         ? this.iconChip(icon, (FIELD_FMT[idx] ?? "%s").replace("%s", val))

@@ -58,8 +58,10 @@ async function boot(): Promise<void> {
   // The shim looks up the callback by name on globalThis.
   (globalThis as Record<string, unknown>)[CALLBACK_NAME] = ui.callback;
   (globalThis as Record<string, unknown>).__nh = { ui, renderer, menuCtl, promptCtl, tombstoneCtl }; // debug handle
-  attachKeyboard(ui.input);
-  // Click a map cell to travel there (left) or look (right).
+  // Click a map cell to travel there (left) or look (right). (The game
+  // KEYBOARD is attached later, right before callMain — otherwise keys
+  // pressed on the splash/save-select/character-pick screens queue up and
+  // replay as game commands the moment the game starts.)
   renderer.onCellClick((x, y, button) => ui.input.push({ kind: "mouse", x, y, button }));
 
   // Settings (qt_set.cpp): persisted write-through; re-applied every boot.
@@ -169,6 +171,10 @@ async function boot(): Promise<void> {
   else ui.clearMessageHistory();
   m.ccall("shim_graphics_set_callback", null, ["string"], [CALLBACK_NAME]);
   console.log("[nethack] callback registered; starting main()");
+
+  // Only now start feeding keys to the game, with a clean queue.
+  ui.input.clear();
+  attachKeyboard(ui.input);
 
   // Asyncify: callMain returns as soon as the core suspends for input.
   try {

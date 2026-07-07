@@ -212,6 +212,7 @@
         cursor: row-resize;
         background: var(--border);
         border-top: 1px solid var(--border-strong);
+        touch-action: none; /* touch drags resize the pane, not scroll */
       }
       .splitter-h:hover, .splitter-v:hover { background: var(--sel-border); }
       .splitter-v {
@@ -220,6 +221,7 @@
         cursor: col-resize;
         background: var(--border);
         border-left: 1px solid var(--border-strong);
+        touch-action: none;
       }
 
       #main { flex: 1; display: flex; min-height: 0; }

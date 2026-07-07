@@ -8,6 +8,7 @@
  * they're written into the generated ~/.nethackrc at boot (see main.ts), so
  * toggling them takes effect on the next reload (the dialog says so).
  */
+import { cancelHeldRepeat } from "./input";
 import type { TileRenderer } from "./tiles";
 import { MIN_RENDER_SIZE, MAX_RENDER_SIZE } from "./tiles";
 import type { StatusLayout } from "./status";
@@ -74,6 +75,7 @@ export function applySettings(s: Settings, host: SettingsHost): void {
 /** Wire the gear button to the settings modal. */
 export function wireSettingsDialog(button: HTMLElement, overlay: HTMLElement, host: SettingsHost): void {
   button.addEventListener("click", () => {
+    cancelHeldRepeat(); // a modal is opening; stop any arrow-repeat cycle
     const s = loadSettings();
 
     const root = document.createElement("div");

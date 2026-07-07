@@ -67,6 +67,7 @@ const LAYOUT: Array<{ slot: SlotKey | null; label: string }[]> = [
 ];
 
 const ARMOR_KEYWORDS: Array<[RegExp, SlotKey]> = [
+  [/blindfold|towel|lenses/i, "blindfold"], // eyewear, before the suit fallback
   [/shield/i, "shield"],
   [/gloves|gauntlets|mitten/i, "gloves"],
   [/\bhelm\b|helmet|\bcap\b|crown|mask/i, "helmet"],
