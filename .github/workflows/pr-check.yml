@@ -1,27 +1,23 @@
-name: Deploy to GitHub Pages
+name: PR check
 
-# Builds the WASM core from scratch (no build artifacts are committed — see
-# .gitignore) and publishes packages/ui/dist to GitHub Pages. This is a
-# project-page deploy (served from /<repo-name>/, not domain root), so the
-# UI build is passed --base=/<repo-name>/ to match; every runtime asset
-# fetch in packages/ui/src is prefixed with base.ts's BASE_URL for exactly
-# this reason.
+# Gate for pull requests: builds the WASM core and the UI (typecheck +
+# vite build) but never deploys. Mirrors deploy-pages.yml's build job —
+# see that file for the overall build shape and caveats.
 #
-# pr-check.yml runs the same build (minus the deploy) on every pull request,
-# so by the time a push reaches main here it's already been gated once.
+# The NetHack core build is cached (see "Cache built NetHack core" below):
+# most PRs only touch packages/ui, so this usually skips the ~90s core
+# compile entirely and just typechecks + bundles the UI.
 
 on:
-  push:
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pr-check-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -47,9 +43,7 @@ jobs:
       # Every generated file here is a pure function of the pinned vendor/nethack
       # commit + our patch/scripts + the emsdk version — if none of those moved,
       # last run's output is bit-for-bit what we'd rebuild, so skip straight to
-      # the (fast) UI build instead of a fresh ~90s core compile. Keyed the same
-      # way as pr-check.yml, so a main push right after its PR merged reuses that
-      # PR's cache entry instead of rebuilding again.
+      # the (fast) UI build instead of a fresh ~90s core compile.
       - name: Cache built NetHack core
         id: cache-core
         uses: actions/cache@v4
@@ -85,19 +79,8 @@ jobs:
         if: steps.cache-core.outputs.cache-hit != 'true'
         run: npm run build:core
 
+      - name: Typecheck UI
+        run: npx tsc --noEmit -p packages/ui/tsconfig.json
+
       - name: Build UI (project-page base path)
         run: npm run build -w @nethack-universal/ui -- --base=/${{ github.event.repository.name }}/
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: packages/ui/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
